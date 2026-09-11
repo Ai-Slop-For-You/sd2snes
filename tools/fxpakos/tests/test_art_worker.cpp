@@ -40,7 +40,9 @@ int main(int argc,char**argv) {
   fxart_host_read_hook=[](){fxart_host_command=1;};run(1);fxart_host_read_hook=nullptr;
   assert(fxart_host_opens==0 && sram_readbyte(FXART_MAILBOX+8)!=FXART_OK);
   unsigned reads=fxart_host_reads;run();assert(reads==fxart_host_reads);
-  fxart_host_command=0;request(9,"/FXPAK Demo.sfc");run();assert(sram_readbyte(FXART_MAILBOX+8)==FXART_OK);
+  fxart_host_command=0;run();assert(sram_readbyte(FXART_MAILBOX+8)==FXART_OK);
+  assert(sram_readlong(FXART_MAILBOX+12)==8); /* Same selection resumes after command. */
+  request(9,"/FXPAK Demo.sfc");run();assert(sram_readbyte(FXART_MAILBOX+8)==FXART_OK);
   assert(fxart_host_max_read<=512 && fxart_host_opens==0);
   for(unsigned i=0;i<65536;i++) if(!((i>=0x5000&&i<0x5200)||(i>=0x6000&&i<0x71c0)))assert(ram[i]==0x5a);
   std::cout<<"PASS MCU worker: success, missing, version/CRC/size rejection, cancellation, command priority, SRAM bounds, 512-byte reads\n";

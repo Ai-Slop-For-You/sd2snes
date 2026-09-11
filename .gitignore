@@ -150,3 +150,5 @@ www/themes/Themes/**/*
 .build/
 __pycache__/
 snes/.dep/
+src/.ARG_VERSION
+src/obj-mk3-stm32/

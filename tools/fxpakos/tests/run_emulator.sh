@@ -11,8 +11,12 @@ fi
 source_dir=$(cd "$source_dir" && pwd)
 mkdir -p "$source_dir/bsnes/obj/headless" "$root/.build/tests"
 make -C "$source_dir/bsnes" -f "$root/tools/fxpakos/tests/Makefile.bsnes" all -j"${JOBS:-2}"
+gcc -std=c99 -Wall -Wextra -Werror -DFXART_HOST_TEST -I"$root/tools/fxpakos/tests" -I"$root/src" \
+  -c "$root/src/fxpak_art.c" -o "$root/.build/tests/fxpak_art.o"
 g++ -std=gnu++11 -O2 -DPROFILE_ACCURACY -DDEBUGGER -include cstdint \
   -I"$source_dir/bsnes" -I"$source_dir/common" -I"$source_dir/bsnes/snes" \
+  -I"$root/src" -I"$root/tools/fxpakos/tests" \
+  "$root/tools/fxpakos/tests/fxpak_art_host.cpp" "$root/.build/tests/fxpak_art.o" \
   "$root/tools/fxpakos/tests/menu_harness.cpp" "$source_dir/bsnes/obj/headless/"*.o \
   -ldl -o "$root/.build/tests/menu_harness"
 cd "$root"
@@ -29,4 +33,17 @@ for region in NTSC PAL; do
   [[ "$region" != PAL ]] || args+=(PAL)
   timeout 120 .build/tests/menu_harness snes/m3nu.bin .build/tests/symbols "$out" "${args[@]}" | tee "$out/run.log"
   python3 tools/fxpakos/tests/verify_render.py "$out" .build/art/starfall | tee "$out/render.log"
+done
+
+python3 tools/fxpakos/tests/make_art_fixtures.py .build/art-sd .build/art/starfall
+g++ -std=c++11 -Wall -Wextra -Werror -Isrc -Itools/fxpakos/tests \
+  tools/fxpakos/tests/test_art_worker.cpp tools/fxpakos/tests/fxpak_art_host.cpp \
+  .build/tests/fxpak_art.o -o .build/tests/test_art_worker
+.build/tests/test_art_worker "$root/.build/art-sd"
+for region in NTSC PAL; do
+  out="$root/.build/tests/art-$region"
+  mkdir -p "$out"
+  timeout 180 .build/tests/menu_harness snes/m3nu.bin .build/tests/symbols "$out" "$region" "$root/.build/art-sd" | tee "$out/run.log"
+  FXART_EDGE_TESTS=1 timeout 90 .build/tests/menu_harness snes/m3nu.bin .build/tests/symbols "$out" "$region" "$root/.build/art-sd" | tee "$out/edge.log"
+  python3 tools/fxpakos/tests/verify_dynamic_render.py "$out" .build/art-sd .build/art/starfall | tee "$out/render.log"
 done
