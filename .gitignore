@@ -144,3 +144,8 @@ snes/menu.rtc
 snes/menu.srm
 !www/**/*
 www/themes/Themes/**/*
+
+# Local FXPAK OS tooling and test output
+.tools/
+.build/
+__pycache__/

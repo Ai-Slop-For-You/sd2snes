@@ -46,7 +46,8 @@ fxos_draw_chrome:
   lda #!fxos_footer_text
   sta @print_src
   sep #$20 : .as
-  stz @print_pal
+  lda #$00
+  sta @print_pal
   lda #$02
   sta @print_x
   lda listdisp

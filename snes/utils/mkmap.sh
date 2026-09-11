@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 args=("$@")
 objcount=0
 
@@ -14,6 +16,7 @@ while read obj; do
   sed -e '/^Externs/,$d;/^Labels/d' < $fn.log | \
   while read line; do
     read addr label <<< "$line"
+    [[ "$addr" =~ ^[[:xdigit:]]+$ ]] || continue
     addr="0x$addr"
     decaddr=`printf "%d" $addr`
     [ "$decaddr" -gt "65535" ] && base=0

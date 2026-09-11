@@ -32,3 +32,14 @@ bnes menu.bin
 
 To work with the emulator, two memory addresses must be set via cheat code and an RTC must be configured. RTC is set in the
 manifest XML file, while the memory addresses are overwritten in the .cht file.
+
+FXPAK OS reproducible build (GNU make >= 4.3, GCC/G++, curl, tar, sha256sum):
+
+  ../tools/fxpakos/build_toolchain.sh
+  PATH="$PWD/../.tools/bin:$PATH" make clean all
+
+The script builds checksum-pinned snescom/sneslink 1.8.1.1 locally. This version
+does not require Boost. Both menu.bin and m3nu.bin are 64 KiB, identical at this
+stage. m3nu.bin is the primary Mk.III artifact. Build errors propagate through
+log capture. The absent, unreferenced cheat.o65 target has been removed; the
+existing firmware cheat support and SNES NMI hook remain untouched.
