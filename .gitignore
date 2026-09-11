@@ -149,3 +149,4 @@ www/themes/Themes/**/*
 .tools/
 .build/
 __pycache__/
+snes/.dep/

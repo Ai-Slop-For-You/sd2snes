@@ -5,41 +5,41 @@ zero            .word  0
 bg2tile         .byt $20
 hdma_pal_src
   .byt 44
-  .byt $60, $2d
+  .byt $41, $18
   .byt 10
-  .byt $00, $00
+  .byt $21, $0c
   .byt 2
-  .byt $60, $2d
+  .byt $41, $18
   .byt 11
-  .byt $00, $00
+  .byt $21, $0c
   .byt 11
-  .byt $20, $04
+  .byt $21, $0c
   .byt 11
-  .byt $40, $08
+  .byt $21, $0c
   .byt 11
-  .byt $60, $0c
+  .byt $21, $10
   .byt 11
-  .byt $80, $10
+  .byt $21, $10
   .byt 11
-  .byt $a0, $14
+  .byt $21, $10
   .byt 11
-  .byt $c0, $18
+  .byt $21, $14
   .byt 11
-  .byt $e0, $1c
+  .byt $21, $14
   .byt 11
-  .byt $00, $21
+  .byt $41, $14
   .byt 11
-  .byt $20, $25
+  .byt $41, $18
   .byt 11
-  .byt $40, $29
+  .byt $41, $18
   .byt 27
-  .byt $60, $2d
+  .byt $41, $18
   .byt 2
-  .byt $20, $04
+  .byt $21, $0c
   .byt 11
-  .byt $60, $2d
+  .byt $41, $18
   .byt 1
-  .byt $20, $04
+  .byt $21, $0c
   .byt $00
 
 hdma_cg_addr_src

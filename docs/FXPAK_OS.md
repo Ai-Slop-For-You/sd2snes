@@ -179,3 +179,9 @@ The exact index format is deliberately versioned and will be introduced only aft
 - pretending the SNES is a 1080p UI platform
 
 The goal is not to imitate a PC frontend pixel-for-pixel. The goal is to make the best-looking, fastest, most coherent library interface that feels native to original SNES hardware.
+
+## Phase 1 implementation
+
+See [FXPAK_OS_PHASE1.md](FXPAK_OS_PHASE1.md) for reproducible builds, the static
+80x112 OBJ cover, reserved memory, emulator evidence, hardware limits, and the
+proposed separate MCU artwork-loading path.

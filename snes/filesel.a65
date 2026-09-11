@@ -14,13 +14,13 @@ filesel_init:
   stx dirstart_addr
   stz filesel_state
   stz dirend_onscreen
-  lda #$02
+  lda #FXOS_LIST_X
   sta cursor_x
   lda #$09
   sta cursor_y
-  lda #$01
+  lda #FXOS_BAR_X
   sta bar_xl
-  lda #$3e
+  lda #FXOS_BAR_WIDTH
   sta bar_wl
   ldx #$0000
   stx dirptr_idx
@@ -112,9 +112,9 @@ filesel_updates:
   clc
   adc #$08
   sta bar_yl
-  lda #$3e
+  lda #FXOS_BAR_WIDTH
   sta bar_wl
-  lda #$01
+  lda #FXOS_BAR_X
   sta bar_xl
 ; get input
   jsr read_pad
@@ -306,7 +306,7 @@ dirent_type_cont
 
   sep #$20 : .as
   ldx fd_fnoff
-  lda #54
+  lda #FXOS_LIST_WIDTH
   sta print_count
   stx print_src
   lda dirent_bank
@@ -320,7 +320,7 @@ dirent_type_cont
   lda print_over
   ldy direntry_fits_idx
   sta !direntry_fits, y
-  lda #54
+  lda #FXOS_LIST_WIDTH
   sec
   sbc print_done
   sta print_count
@@ -1164,7 +1164,7 @@ scroll_direntry_scrollfast
   clc
   adc #$09
   sta cursor_y
-  lda #$02
+  lda #FXOS_LIST_X
   sta cursor_x
   rep #$20 : .al
   lda filesel_sel

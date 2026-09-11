@@ -209,6 +209,7 @@ setup_gfx:
 
 ; Draw static chrome while NMI is disabled; shared text state is not reentrant.
   jsr fxos_init_chrome
+  jsr fxos_init_cover
 
 ; initialize window stack
   ldx #$ffff

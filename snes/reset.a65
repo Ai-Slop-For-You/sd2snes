@@ -11,18 +11,22 @@ NMI_ROUTINE:
   plb
   lda screen_dma_disable
   bne +
+; Rows 9..32 cover even 239 visible lines plus the largest scroll (15).
+; The old 40-row transfers copied 16 invisible rows per BG and left no
+; NTSC VBlank budget for an OAM visibility update.
   ldx #BG1_TILE_BASE+32*9
   stx $2116
-  DMA7(#$01, #40*64, #^BG1_TILE_BUF, #!BG1_TILE_BUF+64*9, #$18)
+  DMA7(#$01, #24*64, #^BG1_TILE_BUF, #!BG1_TILE_BUF+64*9, #$18)
 
   ldx #BG2_TILE_BASE+32*9
   stx $2116
-  DMA7(#$01, #40*64, #^BG2_TILE_BUF, #!BG2_TILE_BUF+64*9, #$18)
+  DMA7(#$01, #24*64, #^BG2_TILE_BUF, #!BG2_TILE_BUF+64*9, #$18)
 
   ldx #BG2_TILE_BASE
   stx $2116
   DMA7(#$01, #64*9, #^BG2_TILE_BUF, #!BG2_TILE_BUF, #$18)
 +
+  jsr fxos_nmi_cover
   lda bar_yl    ; calculate (Y-1) * 8 - 2
   dec
   asl

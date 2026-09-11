@@ -28,13 +28,9 @@ $(MAP) &: menu.bin $(LOG) link.log utils/mkmap.sh
 	utils/mkmap.sh $(OBJS)
 
 # generate menu.bin / m3nu.bin / link.log
-$(OUT) &: $(OBJS)
+$(OUT) link.log &: $(OBJS)
 	sneslink -fsmc -o menu.bin $^ 2>&1 | tee link.log
 	cp menu.bin m3nu.bin
-
-# in case link.log has been deleted
-link.log: $(OBJS)
-	sneslink -fsmc -o /dev/null $^ 2>&1 | tee link.log
 
 # Generic rule to create .o65[.log] out from .a65
 %.o65 %.o65.log &: %.a65
@@ -53,4 +49,9 @@ clean:
 
 -include $(info $(DEPDIR)) $(shell mkdir $(DEPDIR) 2>/dev/null) $(wildcard $(DEPDIR)/*)
 
-.PHONY: all smc map clean
+art:
+	python3 ../tools/fxpakos/make_test_cover.py ../.build/art/starfall.png
+	python3 ../tools/fxpakos/compile_art.py ../.build/art/starfall.png ../.build/art/starfall
+	python3 ../tools/fxpakos/bundle_cover.py ../.build/art/starfall fxpakos_cover.i65
+
+.PHONY: all smc map clean art

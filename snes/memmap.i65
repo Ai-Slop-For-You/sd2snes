@@ -175,3 +175,9 @@
 #define TYPE_THM                    $06
 #define TYPE_SUBDIR                 $40
 #define TYPE_PARENT                 $80
+
+/* Dashboard list geometry; selection/MCU protocol remains unchanged. */
+#define FXOS_LIST_X                 24
+#define FXOS_LIST_WIDTH             32
+#define FXOS_BAR_X                  23
+#define FXOS_BAR_WIDTH              40

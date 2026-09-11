@@ -247,4 +247,5 @@ dbg_ptr         .word 0
 fade_speed      .byt 0
 fade_count      .byt 0
 idle_count      .word 0
+fxos_cover_visible .byt 0
 _END            .byt 0
