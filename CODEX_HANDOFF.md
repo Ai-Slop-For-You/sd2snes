@@ -1,5 +1,16 @@
 # FXPAK OS — Codex Handoff
 
+## Current status (2026-09-11)
+
+Phase 1 is complete; read `docs/FXPAK_OS_PHASE1.md` for the preserved baseline.
+Phase 2 now has selected-ROM sidecar loading, generation/CRC validation and
+bounded VBlank uploads, with NTSC/PAL emulator coverage. Read
+`docs/FXPAK_OS_PHASE2.md` before continuing. The target is FXPAK Pro Mk.III.
+The remaining hardware build step is Quartus Lite 21.1.1 synthesis of
+`verilog/sd2snes_mini/fpga_mini.bi3`, followed by the MCU firmware link and
+physical testing. A pinned Mk.III build wrapper and exact instructions are in
+the Phase 2 document. No carousel or selected-game metadata panel was added.
+
 ## Mission
 
 Turn the stock FXPAK Pro / sd2snes menu into a polished SNES-native frontend matching the established visual target: dark navy/black dashboard, SNES-purple accents, top navigation, large selected-game box art, title/metadata panel, favorites/recent/homebrew/hacks, clean footer button prompts, and smooth SNES-appropriate motion.
@@ -60,7 +71,7 @@ Prefer incremental integration:
 4. Add graphical dashboard pieces around the proven loader.
 5. Replace old UI sections only after the replacement is demonstrably functional.
 
-## Immediate task — Phase 1
+## Original Phase 1 brief (completed)
 
 ### 1. Establish a reproducible menu build
 

@@ -13,8 +13,13 @@ mkpath = $(subst $(eval) ,:,$(wildcard $1))
 
 XILINX_PATH := $(patsubst %,$(XILINX_HOME)/%,$(XILINX_PATHS))
 
+# An Intel-only build must not probe/source an unrelated Xilinx installation.
+INTEL_ONLY_GOALS := mk3 mk3_clean fpga_$(CORE).bi3 output_files/main.rbf
+NEED_XILINX := $(if $(MAKECMDGOALS),$(filter-out $(INTEL_ONLY_GOALS),$(MAKECMDGOALS)),all)
 ifeq ($(HOST),LINUX)
+ifneq ($(strip $(NEED_XILINX)),)
 	XILINX_SETTINGS := $(shell . $(XILINX_HOME)/settings64.sh)
+endif
 else
 	XILINX := $(XILINX_HOME)/ISE
 	XILINX_EDK := $(XILINX_HOME)/EDK
@@ -153,7 +158,7 @@ fpga_$(CORE).bi3: output_files/main.rbf
 	../../utils/rle $^ $@
 
 # Intel pulls a lot more stuff from project context...
-output_files/main.rbf: $(VSRC) $(VHSRC) $(HEADER) $(INT_IP) main.sdc
+output_files/main.rbf: $(VSRC) $(VHSRC) $(HEADER) $(INT_IP) main.sdc main.qsf sd2snes_$(CORE).qpf $(wildcard *.qip)
 	rm -rf db incremental_db
 	$(call T,[mk3] fpga_$(CORE) - Map)
 	$(INTEL_BIN)/quartus_map --read_settings_files=on --write_settings_files=off sd2snes_$(CORE) -c main
@@ -161,6 +166,7 @@ output_files/main.rbf: $(VSRC) $(VHSRC) $(HEADER) $(INT_IP) main.sdc
 	$(INTEL_BIN)/quartus_fit --read_settings_files=on --write_settings_files=off sd2snes_$(CORE) -c main
 	$(call T,[mk3] fpga_$(CORE) - Timing Analysis)
 	$(INTEL_BIN)/quartus_sta sd2snes_$(CORE) -c main
+	@test -s output_files/main.sta.summary
 	@! grep -q 'TNS.*-' output_files/main.sta.summary || (echo "[mk3] sd2snes_$(CORE): Timing not met! Aborting."; exit 55)
 	$(call T,[mk3] fpga_$(CORE) - Assemble)
 	$(INTEL_BIN)/quartus_asm --read_settings_files=off --write_settings_files=off sd2snes_$(CORE) -c main
