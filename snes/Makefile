@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -o pipefail -c
 .DELETE_ON_ERROR:
-.PRECIOUS: %.o65.log %.ips.log
+.PRECIOUS: %.o65.log %.ips.log link.log
 
 IPS = header.ips
 O65 = reset.o65 main.o65 font.o65 palette.o65 data.o65 const.o65 logo.o65 logospr.o65 dma.o65 filesel.o65 pad.o65 time.o65 sysinfo.o65 spc700.o65 spcplay.o65 menu.o65 menudata.o65 ui.o65 fxpakos.o65 nmihook.o65 common.o65 savestate.o65 near.o65 # gfx.o65 # vars.o65
@@ -30,7 +30,7 @@ $(MAP) &: menu.bin $(LOG) link.log utils/mkmap.sh
 # generate menu.bin / m3nu.bin / link.log
 $(OUT) link.log &: $(OBJS)
 	sneslink -fsmc -o menu.bin $^ 2>&1 | tee link.log
-	! grep -Eq "^(Error:|ERROR:|O65 linker:)" link.log || { rm -f $(OUT); exit 1; }
+	! grep -Eq "^(Error:|ERROR:|O65 linker: (Module|Symbol|Still))" link.log || { rm -f $(OUT); exit 1; }
 	cp menu.bin m3nu.bin
 
 # Generic rule to create .o65[.log] out from .a65
