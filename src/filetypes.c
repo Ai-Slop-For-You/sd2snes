@@ -104,6 +104,9 @@ printf("start\n");
               fn[fnlen+1] = 0;
               fnlen++;
             }
+            /* Do not let a large long-name directory overwrite cheats,
+               save/menu SRAM, or the optional artwork mailbox/staging. */
+            if(file_tbl_off + fnlen + 7 > SRAM_NUM_CHEATS) break;
             /* write file size string */
             sram_writeblock(buf, file_tbl_off, 6);
             /* write file name string (leaf) */

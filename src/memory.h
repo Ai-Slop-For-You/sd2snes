@@ -60,6 +60,11 @@ extern char current_filename[];
 #define SRAM_SYSINFO_ADDR            (0xFF1200L)
 #define SRAM_LASTGAME_ADDR           (0xFF1420L)
 #define SRAM_FAVORITEGAMES_ADDR      (0xFF4000L)
+/* Optional cover mailbox/staging: FF5000-FF51FF / FF6000-FF71BF.
+   Favorites end at FF49FF; WRAM backup occupies FF2000-FF3FFF.
+   Menu-only reservations: service is cancelled before ROM loading. */
+#include "fxpak_art.h"
+
 #define SRAM_SCRATCHPAD              (0xFFFF00L)
 #define SRAM_DIRID                   (0xFFFFF0L)
 #define SRAM_RELIABILITY_SCORE       (0x100)

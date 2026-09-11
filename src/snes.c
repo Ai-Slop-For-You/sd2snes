@@ -363,12 +363,15 @@ uint8_t menu_main_loop() {
     if(get_snes_reset()) {
       cmd = 0;
     }
+    if (!cmd && !get_snes_reset()) fxart_poll();
+    else fxart_cancel();
     sleep_ms(20);
     cli_entrycheck();
     if (!cmd) {
       cmd = usbint_handler();
     }
   }
+  fxart_cancel();
   return cmd;
 }
 

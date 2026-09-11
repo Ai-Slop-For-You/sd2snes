@@ -242,6 +242,7 @@ int main(void) {
     sram_writebyte(32, SRAM_CMD_ADDR);
 
     fpga_set_dac_boost(CFG.msu_volume_boost);
+    fxart_init();
     cfg_load_to_menu();
     CFG.show_tribute = 0;
     cfg_save();
