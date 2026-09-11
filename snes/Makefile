@@ -30,6 +30,7 @@ $(MAP) &: menu.bin $(LOG) link.log utils/mkmap.sh
 # generate menu.bin / m3nu.bin / link.log
 $(OUT) link.log &: $(OBJS)
 	sneslink -fsmc -o menu.bin $^ 2>&1 | tee link.log
+	! grep -Eq "^(Error:|ERROR:|O65 linker:)" link.log || { rm -f $(OUT); exit 1; }
 	cp menu.bin m3nu.bin
 
 # Generic rule to create .o65[.log] out from .a65
