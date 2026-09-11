@@ -207,6 +207,9 @@ setup_gfx:
   sta $2183
   DMA7(#$00, #32, #^hdma_math_src, #!hdma_math_src, #$80);
 
+; Draw static chrome while NMI is disabled; shared text state is not reentrant.
+  jsr fxos_init_chrome
+
 ; initialize window stack
   ldx #$ffff
   stx window_stack_head

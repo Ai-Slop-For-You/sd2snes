@@ -27,7 +27,7 @@ NMI_16bit:
   php
     rep #$30 : .al : .xl
     pha : phx : phy : phd : phb
-    jsl @FXOS_NMI_ROUTINE
+    jsl @NMI_ROUTINE
     rep #$30 : .al : .xl
 int_exit:
     plb : pld : ply : plx : pla

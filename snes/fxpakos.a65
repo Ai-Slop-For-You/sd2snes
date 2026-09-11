@@ -2,70 +2,25 @@
 .link page $c0
 #include "memmap.i65"
 
-; FXPAK OS V0.1 overlay
-; ---------------------
-; Keep the proven sd2snes NMI path intact, then layer a small amount of
-; dashboard chrome into the existing WRAM tile buffers. The stock NMI copies
-; those buffers to VRAM before this routine runs, so changes appear on the
-; following frame without disturbing the loader, directory protocol, or
-; selection-bar timing.
-;
-; The top 56 scanlines use the menu's low-resolution Mode 3 region, so the
-; header uses loprint (BG2 only). The lower UI is the pseudo-hires Mode 5
-; region, so the footer uses hiprint (BG1 + BG2).
-
-FXOS_NMI_ROUTINE:
-  jsl @NMI_ROUTINE
-  jsr fxos_draw_chrome
-  rtl
-
-fxos_draw_chrome:
+; Static banner in the real BG2 buffer ($7e, not loprint's $7f port bank).
+; Called from setup_gfx with NMI disabled. Never call shared text renderers
+; from NMI: they modify the foreground print parameters and WRAM port.
+fxos_init_chrome:
   php
-  sep #$20 : .as
-  rep #$10 : .xl
-
-; Top navigation. BG2 is copied by the stock NMI for the first nine tile rows.
-; loprint writes low-resolution 8x8 characters and uses the high-priority bit,
-; making this a safe proof-of-concept overlay on the existing banner.
-  lda #^fxos_nav_text
-  sta @print_bank
-  rep #$20 : .al
-  lda #!fxos_nav_text
-  sta @print_src
-  sep #$20 : .as
-  lda #$01
-  sta @print_x
-  sta @print_y
-  jsr loprint
-
-; Bottom controller legend. This deliberately reuses the existing high-res
-; text renderer so the first build does not introduce a second font system.
-  lda #^fxos_footer_text
-  sta @print_bank
-  rep #$20 : .al
-  lda #!fxos_footer_text
-  sta @print_src
-  sep #$20 : .as
-  lda #$00
-  sta @print_pal
-  lda #$02
-  sta @print_x
-  lda listdisp
-  clc
-  adc #$0a
-  sta @print_y
-  lda #$3c
-  sta @print_count
-  jsr hiprint
-
-  plp
+  rep #$30 : .al : .xl
+  ldx #$0000
+  ldy #$0000
+- lda @fxos_nav_text,y
+  and #$00ff
+  beq +
+  ora #$2000
+  sta @BG2_TILE_BUF+64+2,x
+  inx
+  inx
+  iny
+  bra -
++ plp
   rts
 
-; 32-column Mode 3 header budget. Keep this under 31 visible characters when
-; starting at x=1.
 fxos_nav_text
   .byt "FXPAK OS  SNES  FAV  REC  SET", 0
-
-; Mode 5 footer has a much wider logical text grid.
-fxos_footer_text
-  .byt "A PLAY   B BACK   X MENU   Y OPTIONS", 0
