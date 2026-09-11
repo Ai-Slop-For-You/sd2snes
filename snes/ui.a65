@@ -2,6 +2,11 @@
 .link page $c0
 #include "memmap.i65"
 #include "stack.i65"
+
+; Menu dimensions/indices are bytes. Use CPU multiplication: HDMA scroll
+; writes share the Mode 7 latch and can corrupt a $211b/$211c calculation.
+; NMI does not use the CPU multiply/divide registers.
+
 .byt "===HIPRINT==="
 ; print a string in mode 5 using pseudo-8x8 tiles on two BG layers.
 ; characters 0 and 1 are considered "end of string".
@@ -361,12 +366,12 @@ pushw_skip_current_head
   clc
   adc #$0002
   sep #$20 : .as
-  sta $211b
-  stz $211b
+  sta $4202
   lda @WINDOW_STACK_BASE+8, x
-  sta $211c
+  sta $4203
+  nop : nop : nop : nop ; eight CPU cycles for the unsigned 8x8 product
   rep #$20 : .al
-  lda $2134
+  lda $4216
   asl
   clc
   adc #$0010

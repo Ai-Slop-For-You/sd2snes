@@ -4,6 +4,10 @@
 #include "dma.i65"
 #include "stack.i65"
 
+; Menu dimensions/indices are bytes. Use CPU multiplication: HDMA scroll
+; writes share the Mode 7 latch and can corrupt a $211b/$211c calculation.
+; NMI does not use the CPU multiply/divide registers.
+
 #define MENU_NUM_DATA_TYPES $07
 
 mainmenu:
@@ -121,13 +125,13 @@ menu_select_noinit:
   sbc #$04
   sta bar_wl
   lda listsel_sel
-  sta $211b
-  stz $211b
+  sta $4202
   lda listsel_step
-  sta $211c
+  sta $4203
+  nop : nop : nop : nop ; eight CPU cycles for the unsigned 8x8 product
   lda window_y
   clc
-  adc $2134
+  adc $4216
   sta bar_yl
 
 menu_select_loop1
@@ -215,11 +219,11 @@ show_menu:
     pha
     plb
     lda w_numentries
-    sta $211b
-    stz $211b
+    sta $4202
     lda [w_menu_addr] ; listsel_step from menu structure
-    sta $211c
-    lda $2134
+    sta $4203
+    nop : nop : nop : nop ; eight CPU cycles for the unsigned 8x8 product
+    lda $4216
     sec
     sbc [w_menu_addr] ; listsel_step from menu structure
     inc
@@ -266,12 +270,12 @@ show_menu_loop:
     jsr menu_select_noinit
     cmp #$ff
     beq show_menu_out
-    sta $211b
-    stz $211b
+    sta $4202
     lda #MENU_ENTRY_SIZE
-    sta $211c
+    sta $4203
+    nop : nop : nop : nop ; eight CPU cycles for the unsigned 8x8 product
     rep #$20 : .al
-    lda $2134
+    lda $4216
     clc
     adc #$04
     tay
