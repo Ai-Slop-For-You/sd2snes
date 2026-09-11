@@ -4,6 +4,11 @@
 
 ; NMI - called on VBlank
 NMI_ROUTINE:
+; Foreground artwork path reads use a private direct page. The interrupt
+; prologue saves D; normalize it before accessing the stock menu variables.
+  rep #$20 : .al
+  lda #0
+  tcd
   sep #$20 : .as
   rep #$10 : .xl
   lda #$00
@@ -26,6 +31,7 @@ NMI_ROUTINE:
   stx $2116
   DMA7(#$01, #64*9, #^BG2_TILE_BUF, #!BG2_TILE_BUF, #$18)
 +
+  jsr fxart_nmi
   jsr fxos_nmi_cover
   lda bar_yl    ; calculate (Y-1) * 8 - 2
   dec

@@ -1,0 +1,463 @@
+.text
+.link page $c0
+#include "memmap.i65"
+#include "dma.i65"
+#include "fxpakart.i65"
+
+; Foreground-only producer/validator. No shared renderer scratch variables.
+fxart_menu_init:
+  php
+  rep #$20 : .al
+  stz fxart_generation
+  stz fxart_generation+2
+; Advance a surviving request generation after a SNES-only warm restart. This
+; also makes a stale capability/response left by older firmware harmless.
+  lda @FXART_MAILBOX
+  cmp #$5846
+  bne +
+  lda @FXART_MAILBOX+2
+  cmp #$3141
+  bne +
+  lda @FXART_MAILBOX+20
+  sta fxart_generation
+  lda @FXART_MAILBOX+22
+  sta fxart_generation+2
++ stz fxart_transfer_generation
+  stz fxart_transfer_generation+2
+  stz fxart_offset
+  sep #$20 : .as
+  stz fxart_source
+  stz fxart_row
+  stz fxart_phase
+  stz fxart_exhausted
+  lda #$ff
+  sta fxart_last_path
+  plp
+  rts
+
+fxart_update:
+  php
+  phb
+  phd
+  rep #$30 : .al : .xl
+  lda #0
+  tcd
+  sep #$20 : .as
+  pha
+  plb
+  lda fxart_exhausted
+  bne fxart_update_out
+; Older firmware is a supported fallback-only mode. Never touch its command bus.
+  rep #$20 : .al
+  lda @FXART_MAILBOX
+  cmp #$5846
+  bne fxart_update_out
+  lda @FXART_MAILBOX+2
+  cmp #$3141
+  bne fxart_update_out
+  lda @FXART_MAILBOX+4
+  cmp #1
+  bne fxart_update_out
+  lda @FXART_MAILBOX+6
+  cmp #FXART_RECORD_SIZE
+  bne fxart_update_out
+  jsr fxart_build_path
+  sep #$20 : .as
+  ldx #0
+fxart_compare_path:
+  lda fxart_candidate_path,x
+  cmp fxart_last_path,x
+  bne fxart_changed
+  cmp #0
+  beq fxart_same
+  inx
+  bra fxart_compare_path
+fxart_changed:
+  jsr fxart_request
+fxart_same:
+  sep #$20 : .as
+  lda fxart_phase
+  beq fxart_update_out
+  cmp #2
+  beq fxart_copy
+  rep #$20 : .al
+  dec fxart_timeout
+  beq fxart_timeout_out
+  jsr fxart_response_current
+  bcc fxart_update_out
+  jsr fxart_check_header
+  bcc fxart_invalid
+  stz fxart_offset
+  lda #$ffff
+  sta fxart_crc
+  sep #$20 : .as
+  lda #2
+  sta fxart_phase
+fxart_copy:
+  jsr fxart_copy_chunk
+fxart_update_out:
+  pld
+  plb
+  plp
+  rts
+fxart_timeout_out:
+  sep #$20 : .as
+  lda #0
+  sta @FXART_MAILBOX+16
+fxart_invalid:
+  sep #$20 : .as
+  stz fxart_phase
+  bra fxart_update_out
+
+; Resolve the selected descriptor into a complete path, restoring hidden dots.
+; Overflow/non-ROM selections resolve to the empty path (cancel/fallback).
+fxart_build_path:
+  rep #$30 : .al : .xl
+  stz fxart_candidate_path
+  lda filesel_sel
+  asl
+  asl
+  tay
+  iny
+  iny
+  iny
+  sep #$20 : .as
+  lda [dirptr_addr],y
+  cmp #TYPE_ROM
+  bne fxart_path_done
+  dey
+  lda [dirptr_addr],y
+  clc
+  adc #$c0
+  sta fxart_fd+2
+  dey
+  dey
+  rep #$20 : .al
+  lda [dirptr_addr],y
+  sta fxart_fd
+  sep #$20 : .as
+  ldx #0
+fxart_cwd_loop:
+  lda @FILESEL_CWD,x
+  beq fxart_cwd_end
+  sta fxart_candidate_path,x
+  inx
+  cpx #254
+  bcc fxart_cwd_loop
+  bra fxart_path_overflow
+fxart_cwd_end:
+  cpx #0
+  beq fxart_path_overflow
+  dex
+  lda fxart_candidate_path,x
+  inx
+  cmp #$2f
+  beq fxart_leaf
+  lda #$2f
+  sta fxart_candidate_path,x
+  inx
+fxart_leaf:
+  ldy #6
+fxart_leaf_loop:
+  phd
+  rep #$20 : .al
+  lda #!fxart_fd
+  tcd
+  sep #$20 : .as
+  lda [0],y
+  pld
+  cmp #0 ; PLD changes N/Z; test the filename byte explicitly
+  beq fxart_leaf_end
+  cpx #255
+  bcs fxart_path_overflow
+  cmp #1
+  bne +
+  lda #$2e
++ sta fxart_candidate_path,x
+  inx
+  iny
+  bra fxart_leaf_loop
+fxart_path_overflow:
+  stz fxart_candidate_path
+  rts
+fxart_leaf_end:
+  sta fxart_candidate_path,x
+fxart_path_done:
+  rts
+
+fxart_request:
+  sep #$20 : .as
+; Revoke any partial transfer and make the fallback the next displayed cover.
+  stz fxart_row
+  stz fxart_source
+  stz fxart_phase
+  lda #0
+  sta @FXART_MAILBOX+16
+  rep #$20 : .al
+  inc fxart_generation
+  bne +
+  inc fxart_generation+2
+  bne +
+; Never reuse a generation after 2^32 requests in one menu session.
+  sep #$20 : .as
+  lda #1
+  sta fxart_exhausted
+  rts
++ rep #$20 : .al
+  lda fxart_generation
+  sta @FXART_MAILBOX+20
+  eor #$ffff
+  sta @FXART_MAILBOX+24
+  lda fxart_generation+2
+  sta @FXART_MAILBOX+22
+  eor #$ffff
+  sta @FXART_MAILBOX+26
+  sep #$20 : .as
+  ldx #0
+- lda fxart_candidate_path,x
+  sta fxart_last_path,x
+  sta @FXART_MAILBOX+32,x
+  beq +
+  inx
+  bra -
++ rep #$20 : .al
+  txa
+  sta @FXART_MAILBOX+18
+  lda #120
+  sta fxart_timeout
+  sep #$20 : .as
+  lda fxart_last_path
+  beq +
+  lda #1
++ sta @FXART_MAILBOX+17
+  lda #FXART_READY
+  sta @FXART_MAILBOX+16
+  lda #1
+  sta fxart_phase
+  rts
+
+; Carry set only for a complete response matching the current 32-bit generation.
+fxart_response_current:
+  rep #$20 : .al
+  lda @FXART_MAILBOX+12
+  cmp fxart_generation
+  bne fxart_not_current
+  lda @FXART_MAILBOX+14
+  cmp fxart_generation+2
+  bne fxart_not_current
+  lda @FXART_MAILBOX+8
+  and #$00ff
+  cmp #2
+  bne fxart_not_current
+  sec
+  rts
+fxart_not_current:
+  clc
+  rts
+
+fxart_check_header:
+  rep #$20 : .al
+  lda @FXART_STAGING
+  cmp #$5846
+  bne fxart_bad_header
+  lda @FXART_STAGING+2
+  cmp #$3143
+  bne fxart_bad_header
+  lda @FXART_STAGING+4
+  cmp #1
+  bne fxart_bad_header
+  lda @FXART_STAGING+6
+  cmp #FXART_RECORD_SIZE
+  bne fxart_bad_header
+  lda @FXART_STAGING+8
+  cmp fxart_generation
+  bne fxart_bad_header
+  eor @FXART_STAGING+24
+  cmp #$ffff
+  bne fxart_bad_header
+  lda @FXART_STAGING+10
+  cmp fxart_generation+2
+  bne fxart_bad_header
+  eor @FXART_STAGING+26
+  cmp #$ffff
+  bne fxart_bad_header
+  lda @FXART_STAGING+12
+  cmp #$7050
+  bne fxart_bad_header
+  lda @FXART_STAGING+14
+  cmp #1
+  bne fxart_bad_header
+  lda @FXART_STAGING+16
+  cmp #FXART_PAYLOAD_SIZE
+  bne fxart_bad_header
+  lda @FXART_STAGING+18
+  ora @FXART_STAGING+28
+  ora @FXART_STAGING+30
+  bne fxart_bad_header
+  lda @FXART_STAGING+20
+  eor @FXART_STAGING+22
+  cmp #$ffff
+  bne fxart_bad_header
+  sec
+  rts
+fxart_bad_header:
+  clc
+  rts
+
+; Freeze a complete CRC-checked record in WRAM before NMI can consume it.
+; At most 256 bytes copied/checksummed per foreground iteration.
+fxart_copy_chunk:
+  jsr fxart_response_current
+  bcc fxart_copy_wait
+  ldx fxart_offset
+  txa
+  clc
+  adc #256
+  cmp #FXART_RECORD_SIZE
+  bcc +
+  lda #FXART_RECORD_SIZE
++ sta fxart_chunk_end
+fxart_copy_loop:
+  sep #$20 : .as
+  lda @FXART_STAGING,x
+  sta @FXART_BUFFER,x
+  rep #$20 : .al
+  and #$00ff
+  sta fxart_byte
+  cpx #32
+  bcc fxart_copy_next
+  lda fxart_crc
+  xba
+  and #$00ff
+  eor fxart_byte
+  asl
+  tay
+  lda fxart_crc
+  xba
+  and #$ff00
+  sta fxart_byte
+  phx
+  tyx
+  lda @fxart_crc_table,x
+  eor fxart_byte
+  sta fxart_crc
+  plx
+fxart_copy_next:
+  inx
+  cpx fxart_chunk_end
+  bcc fxart_copy_loop
+  stx fxart_offset
+  jsr fxart_response_current
+  bcc fxart_copy_wait
+  cpx #FXART_RECORD_SIZE
+  bne fxart_copy_return
+; Check the frozen header agrees with the stable publication, not just payload.
+  ldx #0
+- lda @FXART_BUFFER,x
+  cmp @FXART_STAGING,x
+  bne fxart_copy_abort
+  inx
+  inx
+  cpx #32
+  bcc -
+  lda @FXART_BUFFER+20
+  cmp fxart_crc
+  bne fxart_copy_abort
+  lda @FXART_BUFFER+4512
+  bne fxart_copy_abort
+  ldx #4512
+- lda @FXART_BUFFER,x
+  bmi fxart_copy_abort
+  inx
+  inx
+  cpx #FXART_RECORD_SIZE
+  bcc -
+  lda fxart_generation
+  sta fxart_transfer_generation
+  lda fxart_generation+2
+  sta fxart_transfer_generation+2
+  sep #$20 : .as
+  stz fxart_phase
+  lda #1
+  sta fxart_row ; publish to NMI LAST
+fxart_copy_return:
+  rts
+fxart_copy_wait:
+; A normal MCU command may cancel and restart the same sidecar. Retry its
+; publication within the existing deadline, discarding the partial snapshot.
+  sep #$20 : .as
+  lda #1
+  sta fxart_phase
+  rts
+fxart_copy_abort:
+  sep #$20 : .as
+  stz fxart_phase
+  rts
+
+; Inactive OBJ region B is $e400-$ffff bytes, tile IDs 288..511.
+; Fallback region A and palette 0 never change. Two 320-byte rows per VBlank.
+fxart_nmi:
+  php
+  rep #$30 : .al : .xl
+  lda fxart_row
+  and #$00ff
+  beq fxart_nmi_done
+  lda fxart_transfer_generation
+  cmp fxart_generation
+  bne fxart_nmi_cancel
+  lda fxart_transfer_generation+2
+  cmp fxart_generation+2
+  bne fxart_nmi_cancel
+  lda fxart_row
+  and #$00ff
+  cmp #15
+  beq fxart_nmi_commit
+  dec
+  xba
+  sta fxart_dma_source
+  clc
+  adc #$7200
+  sta fxart_dma_target
+  lda fxart_dma_source
+  lsr
+  lsr
+  clc
+  adc fxart_dma_source
+  adc #!FXART_BUFFER+32
+  sta fxart_dma_source
+  ldx fxart_dma_target
+  stx $2116
+  DMA7(#$01, #320, #^FXART_BUFFER, fxart_dma_source, #$18)
+  rep #$20 : .al
+  lda fxart_dma_source
+  clc
+  adc #320
+  sta fxart_dma_source
+  lda fxart_dma_target
+  clc
+  adc #256
+  sta $2116
+  DMA7(#$01, #320, #^FXART_BUFFER, fxart_dma_source, #$18)
+  sep #$20 : .as
+  inc fxart_row
+  inc fxart_row
+  bra fxart_nmi_done
+fxart_nmi_commit:
+  sep #$20 : .as
+  lda #$90
+  sta $2121
+  DMA7(#$00, #32, #^FXART_BUFFER, #!FXART_BUFFER+4512, #$22)
+  sep #$20 : .as
+  lda #1
+  sta fxart_source
+  stz fxart_row
+  bra fxart_nmi_done
+fxart_nmi_cancel:
+  sep #$20 : .as
+  stz fxart_row
+  stz fxart_source
+fxart_nmi_done:
+  plp
+  rts
+
+#include "fxpakart_tables.i65"

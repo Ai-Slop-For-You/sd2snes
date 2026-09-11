@@ -106,7 +106,7 @@ printf("start\n");
             }
             /* Do not let a large long-name directory overwrite cheats,
                save/menu SRAM, or the optional artwork mailbox/staging. */
-            if(file_tbl_off + fnlen + 7 > SRAM_NUM_CHEATS) break;
+            if(file_tbl_off + fnlen + 7 > SRAM_NUM_CHEATS) goto directory_complete;
             /* write file size string */
             sram_writeblock(buf, file_tbl_off, 6);
             /* write file name string (leaf) */
@@ -124,6 +124,7 @@ printf("start\n");
       }
     }
   }
+directory_complete:
   /* write directory termination */
   sram_writelong(0, ptr_tbl_off);
   if(CFG.sort_directories) {

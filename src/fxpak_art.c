@@ -36,7 +36,7 @@ static int current(void) {
 }
 void fxart_cancel(void) {
   if(opened) f_close(&art_file);
-  opened=0; state=0;
+  opened=0; state=0; handled=0; /* Retry a still-current request after a modal command. */
   sram_writebyte(FXART_IDLE,FXART_MAILBOX+8);
 }
 void fxart_init(void) {

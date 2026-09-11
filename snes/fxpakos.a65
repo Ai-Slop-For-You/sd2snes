@@ -80,13 +80,18 @@ fxos_nmi_cover:
   lda screen_dma_disable
   bne fxos_hide_cover
   sep #$20 : .as
-  lda #$01
+  lda fxart_source
+  inc
   cmp fxos_cover_visible
   beq fxos_cover_done
   sta fxos_cover_visible
   ldx #$0040 ; OAM word address of entry 32
   stx $2102
-  DMA7(#$00, #140, #^fxos_cover_oam, #!fxos_cover_oam, #$04)
+  lda fxart_source
+  beq +
+  DMA7(#$00, #140, #^fxart_dynamic_oam, #!fxart_dynamic_oam, #$04)
+  bra fxos_cover_done
++ DMA7(#$00, #140, #^fxos_cover_oam, #!fxos_cover_oam, #$04)
   bra fxos_cover_done
 fxos_hide_cover:
   sep #$20 : .as

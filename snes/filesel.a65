@@ -51,6 +51,7 @@ fileselloop:
   stz isr_done
   jsr printtime
   jsr filesel_updates ; update stuff, check keys etc
+  jsr fxart_update
   lda filesel_dirty   ; is there ANY reason to redraw the menu?
   cmp #$01
   beq fileselloop_redraw ; then do
