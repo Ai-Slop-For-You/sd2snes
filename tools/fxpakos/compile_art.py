@@ -30,7 +30,7 @@ except ImportError as exc:  # pragma: no cover - user-facing import guard
 
 DEFAULT_WIDTH = 80
 DEFAULT_HEIGHT = 112
-DEFAULT_COLORS = 16
+DEFAULT_COLORS = 15
 
 
 def snes_color_word(rgb: Sequence[int]) -> int:
@@ -54,14 +54,20 @@ def fit_image(image: Image.Image, width: int, height: int, background: tuple[int
 
 
 def quantize_image(image: Image.Image, colors: int, dither: bool) -> Image.Image:
-    """Return a P-mode image with a deterministic <=16-color palette."""
-    if not 1 <= colors <= 16:
-        raise ValueError("SNES 4bpp output supports 1..16 colors")
-    return image.quantize(
+    """Reserve transparent index 0; opaque SNES BG/OBJ art uses indices 1..15."""
+    if not 1 <= colors <= 15:
+        raise ValueError("Opaque SNES 4bpp art supports 1..15 colors (index 0 is transparent)")
+    quantized = image.quantize(
         colors=colors,
         method=Image.Quantize.MEDIANCUT,
         dither=Image.Dither.FLOYDSTEINBERG if dither else Image.Dither.NONE,
     )
+
+    indexed = Image.new("P", image.size)
+    indexed.putdata([value + 1 for value in quantized.tobytes()])
+    palette = [0, 0, 0] + (quantized.getpalette() or [])[:45]
+    indexed.putpalette(palette + [0] * (768 - len(palette)))
+    return indexed
 
 
 def palette_rgb(image: Image.Image, entries: int = 16) -> list[tuple[int, int, int]]:
@@ -212,10 +218,14 @@ def main() -> int:
     prefix.with_suffix(".4bpp").write_bytes(tiles)
     prefix.with_suffix(".pal").write_bytes(palette)
     prefix.with_suffix(".map").write_bytes(tilemap)
-    indexed.convert("RGB").save(prefix.with_suffix(".preview.png"))
+    # Preview the actual BGR555 values, not the higher precision source palette.
+    preview = indexed.copy()
+    preview.putpalette([((v >> 3) * 255 // 31) for rgb in palette_rgb(indexed) for v in rgb] + [0] * 720)
+    preview.convert("RGB").save(prefix.with_suffix(".preview.png"))
 
     metadata = {
         "format": "fxpakos-art-v1",
+        "transparent_index": 0,
         "source": args.input.name,
         "width": args.width,
         "height": args.height,
