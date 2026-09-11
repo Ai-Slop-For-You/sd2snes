@@ -7,19 +7,25 @@
 ; from NMI: they modify the foreground print parameters and WRAM port.
 fxos_init_chrome:
   php
+  phb
+  sep #$20 : .as
+  lda #$7e
+  pha
+  plb
   rep #$30 : .al : .xl
   ldx #$0000
   ldy #$0000
-- lda @fxos_nav_text,y
+- lda @fxos_nav_text,x
   and #$00ff
   beq +
   ora #$2000
-  sta @BG2_TILE_BUF+64+2,x
-  inx
+  sta !BG2_TILE_BUF+64+2,y
   inx
   iny
+  iny
   bra -
-+ plp
++ plb
+  plp
   rts
 
 fxos_nav_text

@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -o pipefail -c
 .DELETE_ON_ERROR:
+.PRECIOUS: %.o65.log %.ips.log
 
 IPS = header.ips
 O65 = reset.o65 main.o65 font.o65 palette.o65 data.o65 const.o65 logo.o65 logospr.o65 dma.o65 filesel.o65 pad.o65 time.o65 sysinfo.o65 spc700.o65 spcplay.o65 menu.o65 menudata.o65 ui.o65 fxpakos.o65 nmihook.o65 common.o65 savestate.o65 near.o65 # gfx.o65 # vars.o65
@@ -39,11 +40,13 @@ link.log: $(OBJS)
 %.o65 %.o65.log &: %.a65
 	cpp $(GENDEPFLAGS) $<
 	snescom -J -Wall -o $(@:.log=) $< 2>&1 | tee $(@:.log=).log
+	! grep -q "^Error:" $(@:.log=).log || { rm -f $(@:.log=); exit 1; }
 
 # Generic rule to create .ips out from .a65
 %.ips %.ips.log &: %.a65
 	cpp $(GENDEPFLAGS) $<
 	snescom -I -J -Wall -o $(@:.log=) $< 2>&1 | tee $(@:.log=).log
+	! grep -q "^Error:" $(@:.log=).log || { rm -f $(@:.log=); exit 1; }
 
 clean:
 	rm -f -- *~ *.ips *.o65 $(OUT) *.o65.log *.ips.log
