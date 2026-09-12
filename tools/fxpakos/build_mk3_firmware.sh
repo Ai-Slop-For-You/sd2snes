@@ -13,7 +13,7 @@ case "${1:-}" in
   *) echo "Usage: $0 [--release-mini]" >&2; exit 2 ;;
 esac
 test -s "$mini"
-version=1.11.0-fxpak-p2
+version=1.11.0-fxpak-p3
 mkdir -p .build/mk3-firmware
 # A compiler/verifier failure must not leave a manifest from an older build.
 rm -f .build/mk3-firmware/SHA256SUMS .build/mk3-firmware/source-revision.log \

@@ -2,20 +2,26 @@
 
 ## Current status (2026-09-12)
 
-Phase 1 is complete; read `docs/FXPAK_OS_PHASE1.md` for the preserved baseline.
-Phase 2 now has selected-ROM sidecar loading, generation/CRC validation and
-bounded VBlank uploads, with NTSC/PAL emulator coverage. Read
-`docs/FXPAK_OS_PHASE2.md` before continuing. The target is FXPAK Pro Mk.III.
+Phase 1 is complete in the emulator; read `docs/FXPAK_OS_PHASE1.md` for the
+preserved baseline. Phase 2 provides selected-ROM artwork, generation/CRC
+validation and bounded VBlank uploads. Phase 3 adds offline `.fxm` metadata,
+a readable right-side panel, lavender/navy chrome, a compact three-row browser
+viewport and controller footer. Read `docs/FXPAK_OS_PHASE2.md` and
+`docs/FXPAK_OS_PHASE3.md` before continuing. The target is FXPAK Pro Mk.III.
+Preserve this implementation; do not restart the earlier milestones.
 Both Mk.III MCU images now build and validate using the unchanged mini core
 extracted from the pinned official v1.11.0 firmware. Reproduce with
 `tools/fxpakos/build_mk3_firmware.sh --release-mini` and ARM GCC 13.2.Rel1 on PATH.
 The new images are `src/obj-mk3/firmware.im3` and
 `src/obj-mk3-stm32/firmware.stm`; physical testing remains outstanding.
-The STM32 linker now puts the shared `.ahbram` buffers in startup-cleared
+Firmware version is `1.11.0-fxpak-p3`. The STM32 linker puts shared `.ahbram` buffers in startup-cleared
 `NOLOAD` BSS. This fixes the extra flash payload that previously failed the
 strict ELF-end check; that check remains enabled. Both firmware images and
-the native linker/corruption regression tests pass. The menu is byte-identical
-to the existing 9,106-frame NTSC/PAL-tested binary.
+the native linker/corruption regression tests pass. Phase 3 leaves the artwork
+protocol, native cover format, NMI routines and ROM loader path unchanged.
+The pixel tests identified and fixed one scroll-table duration defect that
+clipped the third compact browser row. Detailed current evidence and artifact
+hashes are in the Phase 3 document; Phase 1/2 hashes remain historical.
 
 Quartus Lite 21.1.1 is installed and its compiler runs. Fresh synthesis still
 needs `cyclone-21.1.1.850.qdz`: the user approved both agreements and completed
@@ -23,8 +29,10 @@ MyAltera sign-in. Do not ask again. The signed-in download flow dismisses the
 agreement but fails to deliver the package here. Once available, install the
 Cyclone IV device package and run `tools/fxpakos/build_mk3_mini.sh`, then
 `tools/fxpakos/build_mk3_firmware.sh` without `--release-mini`.
-Read Phase 2 for exact artifact provenance and limits. No carousel or
-selected-game metadata panel was added.
+Read Phase 2 for mini-core provenance and Phase 3 for current image/evidence
+limits. No physical boot, saves, FPGA reconfiguration, SD latency or CRT tests
+have been performed. No carousel, screenshots feature, or new product milestone
+was added. Further product scope requires a new user request.
 
 ## Mission
 
@@ -180,7 +188,8 @@ Do not add web scraping to SNES-side code.
 
 ## Longer-term phases
 
-After static cover rendering is stable:
+Historical roadmap; items 1 and 2 are now implemented. This list does not
+authorize starting another milestone:
 
 1. Selected-game title + metadata panel
 2. Artwork loading tied to highlighted ROM
@@ -205,7 +214,7 @@ Do not spend time on NES/SMS/A2600 cores during this phase. The frontend is the 
 - If something cannot be verified, say exactly why.
 - Keep a short running implementation note in the repo when architecture decisions change.
 
-## Definition of the next successful milestone
+## Original Phase 1 completion checklist (historical)
 
 A successful Phase 1 ends with:
 
@@ -217,4 +226,6 @@ A successful Phase 1 ends with:
 - at least one 80x112 compiled cover is rendered by the actual SNES menu code
 - build/test instructions are documented
 
-Once that milestone is reached, stop and summarize the resulting architecture, commits, test evidence, and any hardware-only validation that remains.
+That milestone is complete in the emulator. Current Phase 3 acceptance,
+software evidence and remaining hardware/Quartus checks are documented in
+`docs/FXPAK_OS_PHASE3.md`.
