@@ -1,8 +1,10 @@
 # FXPAK OS Phase 2 — dynamic selected-ROM artwork
 
 Target: **FXPAK Pro Mk.III**. The menu/MCU implementation is exercised end to end
-in the NTSC/PAL harness. Flashable firmware and physical hardware validation
-remain dependent on the Quartus mini-core build described below.
+in the NTSC/PAL harness. Both Mk.III MCU firmware images now build and pass
+integrity/layout checks using the unchanged mini core extracted from the
+pinned official v1.11.0 release. Fresh local FPGA synthesis and physical
+hardware validation remain outstanding; see the provenance and build paths below.
 
 ## Memory audit and protocol v1
 
@@ -155,7 +157,105 @@ production translation units with the real headers and original `-Wall -Werror` 
 explicitly bypasses only the unrelated generated `cfgware.h` prerequisite;
 none of those units includes that header. It does not claim to link firmware.
 
-## Mk.III Quartus build setup and remaining step
+## Mk.III firmware build and mini-core provenance
+
+A clean ARM GCC 13.2.Rel1 build now produces `firmware.im3` for the LPC1756
+Mk.III and `firmware.stm` for the STM32F401 Mk.III, both with version
+`1.11.0-fxpak-p2`. The menu remains byte-identical to the 9,106-frame validated
+binary. MCU C/assembly and SNES sources are unchanged by these build fixes;
+the STM32 linker correction below changes buffer placement and initialization.
+
+The STM32 build initially failed `ELF flash end differs from firmware`.
+`stm32f401.ld` did not place the shared `.ahbram` input sections, so the linker
+emitted 8,992 bytes as an orphan loadable section after `.data`. Startup copied
+only `.data` and cleared only `.bss`; the orphan buffers were outside both
+initialization ranges. All three objects (`ptrcache`, `msu_cltbl`, `pcm_cltbl`)
+are declared without initial values. The STM32 linker now collects `.ahbram`
+and `.ahbram.*` inside explicit `NOLOAD` `.bss`, covering them with the existing
+startup clear. LPC's separate AHB RAM layout is unchanged. The strict
+`__data_load_end == flash_base + firmware_size` check is retained.
+
+In the corrected STM32 image, BSS spans `$20000420..$2000532B` and includes all
+three buffers. Its flash payload ends at `$0802EC68`; BSS adds RAM reservation
+but no flash bytes. Host layout tests do not establish successful physical boot.
+
+| Built image | Bytes | Flash bytes free | Shared heap/stack bytes remaining |
+|---|---:|---:|---:|
+| LPC Mk.III `firmware.im3` | 141,460 | 71,532 | 4,120 |
+| STM32 Mk.III `firmware.stm` | 142,440 | 70,552 | 44,244 |
+
+SHA-256 of the available images:
+
+- `firmware.im3`: `25b3f9e337715d78cdc323ab01046c9df0e9598ea839dd62f76eb5917e33f6ba`
+- `firmware.stm`: `91904ad396194607b2993296d36bc405f736f91b108a443a03050e3062e37e1b`
+- `m3nu.bin`: `b2d8599f27607e00f40faaf6be73f6f2b6d601f1df8e4f26a84624b9e8b2cedd`
+
+The embedded mini core is recovered verbatim from the
+[official v1.11.0 firmware archive](https://sd2snes.de/files/sd2snes_firmware_v1.11.0.zip).
+It is **not a fresh local synthesis**. The source comparison against upstream
+commit `31dca4678ee8acbef8da1d05aeda35061eeccbfd` verifies every mini-core file,
+except the Makefile dependency change, with exactly one permitted QSF change:
+removal of the nonexistent `data.v` entry. All RTL, PLL, pin assignments and
+timing constraints match the release. Other game cores are not extracted or
+replaced; some have pre-existing changes beyond v1.11.0.
+
+`extract_release_mini.py` checks the complete archive and original firmware
+SHA-256, validates the firmware header/CRC, checks the Thumb call site and
+literal pointer used by `fpga_rompgm`, then extracts 54,754 bytes at file offset
+`0x14b08`. It verifies the resulting bitstream hash before writing it under
+`.build/upstream/`; it never creates a pretend synthesis output in `verilog/`.
+The original bytes, including their final padding, are preserved without
+recompression.
+
+| Asset | SHA-256 |
+|---|---|
+| Official release ZIP | `8a56c4a23be13eed51f11e82525f8d812a8fe23567ca2708de507ad51c62fb64` |
+| Official `firmware.im3` | `8393cd381d71bc30b363802c718b39b80987171a09a6b83a27d5e000305ba5ab` |
+| Extracted mini core | `9ae79c3028391063338d42ae16b19acf48d0d80858939b015ef6481f55cbefe9` |
+
+Reproduce the available firmware build from the repository root:
+
+```sh
+export PATH="$PWD/.tools/arm-gnu-toolchain-13.2.Rel1-x86_64-arm-none-eabi/bin:$PATH"
+# If the pinned upstream commit is absent, fetch upstream tag v1.11.0 first.
+tools/fxpakos/build_mk3_firmware.sh --release-mini
+```
+
+This builds the host packaging utilities, cleans and compiles both Mk.III
+firmwares with the original strict warnings, and validates each resulting
+image against the ELF, board signature, version, payload size/CRC, header
+padding, vectors, flash/RAM bounds, and exact embedded mini bytes. Logs and
+hashes are in `.build/mk3-firmware/`. Compiler/verifier failures stop the wrapper;
+verifier error text is retained in each board's log. Prior combined success
+manifests are removed before compilation and regenerated only after both pass.
+The revision log identifies HEAD; check the working-tree status as well when
+building locally with uncommitted changes.
+
+With the ARM tools still on PATH, run the focused firmware regression suite:
+
+```sh
+python3 -m unittest discover -s tools/fxpakos/tests -p test_mk3_firmware.py -v
+```
+
+All three test methods pass, without skips, after the dual-board release-mini
+build. A native ARM fixture links the actual STM32 startup assembly and checks
+data/BSS boundaries, word alignment, heap placement, NOBITS sections, program
+headers and initialized data. Reconstructing the former orphan-section layout
+must fail the strict flash-end check. The real-image checks cover both boards
+and reject changed signatures, versions, sizes, CRCs/inverses, header padding,
+payloads, truncated inputs, a payload with a recomputed CRC, the wrong ELF,
+and mismatched mini contents/length. The real-image test skips if its two built
+images or release mini are missing; the ARM tests skip without the toolchain.
+Treat skips as missing verification, not passing firmware validation.
+The main RAM headroom reported by the validator is shared heap/stack space,
+not a measured runtime stack bound.
+
+The resulting files are an overlay for an existing working Mk.III SD setup:
+replace `sd2snes/m3nu.bin` and the firmware file appropriate to the MCU
+(`firmware.im3` or `firmware.stm`). Keep the existing game cores, support files,
+configuration, saves and ROMs. No SD card has been modified here.
+
+## Fresh Quartus synthesis (still outstanding)
 
 The FPGA source and build flow are present. `verilog/sd2snes_mini/main.qsf`
 targets **Cyclone IV E EP4CE15F17C8** and records Quartus Lite 21.1.1; its PLL IP
@@ -181,19 +281,14 @@ RPM was downloaded and extracted under `.tools/quartus-deps/root`, without
 changing system libraries. Export its `usr/lib64` directory through
 `LD_LIBRARY_PATH` before invoking the build wrapper.
 
-The real `make mk3` now reaches `quartus_map`, which stops with error 20004
-because Cyclone IV device support is not installed yet. The separate
-`cyclone-21.1.1.850.qdz` agreement was explicitly approved and acceptance was
-attempted. The direct agreement page fails with a Drupal AJAX dialog error
-before starting the download. The normal download route requires MyAltera
-sign-in; this browser has no signed-in session. Direct CDN requests also return
-HTTP 403. Supply the pinned package in `.tools/quartus-downloads/` or finish
-MyAltera sign-in to continue; no further approval of these same download terms
-is needed.
-No substitute or dummy bitstream was used. All Mk.III MCU translation units
-except `fpga.c` (which embeds the missing bitstream) compile successfully with
-ARM GCC 13.2.Rel1 and the original strict flags; host `genhdr`, `lpcchksum`,
-`bin2c`, `rle` and `derle` also build successfully.
+The real `make mk3` reaches `quartus_map`, which stops with error 20004
+because Cyclone IV device support is not installed. Both download agreements
+are approved, and the user completed MyAltera sign-in. The signed-in flow now
+opens and dismisses the agreement correctly, but still does not deliver
+`cyclone-21.1.1.850.qdz` in this browser; direct CDN requests return HTTP 403.
+Supply that pinned package in `.tools/quartus-downloads/` and run the installer
+again with Cyclone IV selected to finish the native synthesis environment.
+Do not repeat license approval or sign-in requests already completed.
 
 Use the [official Quartus 21.1.1 Linux download page](https://www.altera.com/downloads/fpga-development-tools/quartus-prime-lite-edition-design-software-version-21-1-1-linux)
 to obtain these pinned packages together (Questa and other FPGA families are
@@ -224,17 +319,15 @@ tools/fxpakos/build_mk3_mini.sh
 # Produces verilog/sd2snes_mini/fpga_mini.bi3 after passing timing checks.
 
 # Put arm-none-eabi-gcc on PATH (13.2.Rel1 used for the compile checks here).
-make -C utils bin2c
-make -C src/utils
-make -C src CONFIG=config-mk3 all
-# Expected firmware output: src/obj-mk3/firmware.im3
+tools/fxpakos/build_mk3_firmware.sh
+# Uses the locally synthesized asset; builds and verifies both Mk.III images.
 ```
 
 Review the real timing/build reports and firmware memory-size output before
 hardware testing. Additional host compatibility issues may only become visible
-once the vendor tool runs. The `.bi3` generation and full firmware link have
-**not** run successfully here. Mk.II/Xilinx synthesis is not required for this
-target and was not pursued.
+once full synthesis runs. Fresh `.bi3` generation has **not** succeeded here;
+the completed firmware link uses the release asset described above. No new
+FPGA timing report is available. Mk.II/Xilinx synthesis was not pursued.
 
 Physical SNES, SD-card latency and actual FPGA reconfiguration are not validated
 by the host harness. It executes the production menu binary and production C

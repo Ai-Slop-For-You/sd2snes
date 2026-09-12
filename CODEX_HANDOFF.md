@@ -1,19 +1,30 @@
 # FXPAK OS — Codex Handoff
 
-## Current status (2026-09-11)
+## Current status (2026-09-12)
 
 Phase 1 is complete; read `docs/FXPAK_OS_PHASE1.md` for the preserved baseline.
 Phase 2 now has selected-ROM sidecar loading, generation/CRC validation and
 bounded VBlank uploads, with NTSC/PAL emulator coverage. Read
 `docs/FXPAK_OS_PHASE2.md` before continuing. The target is FXPAK Pro Mk.III.
-Quartus Lite 21.1.1 is installed and its compiler runs locally. Cyclone IV
-device support is still missing. The user approved both download agreements;
-do not ask again. The device download's direct page fails with a Drupal AJAX
-error, and its normal route needs MyAltera sign-in. Supply the pinned Cyclone IV
-package or complete sign-in to continue. The remaining hardware build step is synthesis of
-`verilog/sd2snes_mini/fpga_mini.bi3`, followed by the MCU firmware link and
-physical testing. A pinned Mk.III build wrapper and exact instructions are in
-the Phase 2 document. No carousel or selected-game metadata panel was added.
+Both Mk.III MCU images now build and validate using the unchanged mini core
+extracted from the pinned official v1.11.0 firmware. Reproduce with
+`tools/fxpakos/build_mk3_firmware.sh --release-mini` and ARM GCC 13.2.Rel1 on PATH.
+The new images are `src/obj-mk3/firmware.im3` and
+`src/obj-mk3-stm32/firmware.stm`; physical testing remains outstanding.
+The STM32 linker now puts the shared `.ahbram` buffers in startup-cleared
+`NOLOAD` BSS. This fixes the extra flash payload that previously failed the
+strict ELF-end check; that check remains enabled. Both firmware images and
+the native linker/corruption regression tests pass. The menu is byte-identical
+to the existing 9,106-frame NTSC/PAL-tested binary.
+
+Quartus Lite 21.1.1 is installed and its compiler runs. Fresh synthesis still
+needs `cyclone-21.1.1.850.qdz`: the user approved both agreements and completed
+MyAltera sign-in. Do not ask again. The signed-in download flow dismisses the
+agreement but fails to deliver the package here. Once available, install the
+Cyclone IV device package and run `tools/fxpakos/build_mk3_mini.sh`, then
+`tools/fxpakos/build_mk3_firmware.sh` without `--release-mini`.
+Read Phase 2 for exact artifact provenance and limits. No carousel or
+selected-game metadata panel was added.
 
 ## Mission
 
