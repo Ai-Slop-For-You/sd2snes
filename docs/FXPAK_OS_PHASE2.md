@@ -170,11 +170,24 @@ maintenance changes skip the unrelated Xilinx setup probe for Intel-only goals,
 track QSF/QPF/QIP/PLL dependencies, require a nonempty timing report, and remove
 the mini project's obsolete reference to nonexistent, unused `data.v`.
 
-Quartus is not installed in this Codex environment. The official installer and
-vendor download endpoint returned HTTP 403 to the local downloader on
-2026-09-11, so installation/synthesis could not be validated here. The Mk.III
-make dry run reaches the correct map → fit → timing → assemble → RLE sequence,
-with no Xilinx dependency. No substitute or dummy bitstream was used.
+Quartus Lite 21.1.1 Build 850 is now installed locally in this Codex environment
+at `.tools/intelFPGA_lite/21.1`. The official browser download succeeded after
+accepting the vendor agreement; the installer matched the pinned SHA-1. Direct
+command-line requests to the vendor CDN still returned HTTP 403.
+
+The shell and Analysis & Synthesis executables run on Fedora 44. The latter
+requires `libcrypt.so.1`: Fedora's signed `libxcrypt-compat-4.5.2-3.fc44.x86_64`
+RPM was downloaded and extracted under `.tools/quartus-deps/root`, without
+changing system libraries. Export its `usr/lib64` directory through
+`LD_LIBRARY_PATH` before invoking the build wrapper.
+
+The real `make mk3` now reaches `quartus_map`, which stops with error 20004
+because Cyclone IV device support is not installed yet. The separate
+`cyclone-21.1.1.850.qdz` download is pending approval of its vendor agreement.
+No substitute or dummy bitstream was used. All Mk.III MCU translation units
+except `fpga.c` (which embeds the missing bitstream) compile successfully with
+ARM GCC 13.2.Rel1 and the original strict flags; host `genhdr`, `lpcchksum`,
+`bin2c`, `rle` and `derle` also build successfully.
 
 Use the [official Quartus 21.1.1 Linux download page](https://www.altera.com/downloads/fpga-development-tools/quartus-prime-lite-edition-design-software-version-21-1-1-linux)
 to obtain these pinned packages together (Questa and other FPGA families are
@@ -187,16 +200,26 @@ Their vendor-published SHA-1 values are in
 `tools/fxpakos/quartus-21.1.1.sha1`. Verify them with `sha1sum -c` from the download
 directory, then run the vendor installer and install Quartus plus Cyclone IV
 support. Keep the install outside the tracked source tree, e.g. `.tools/quartus/`.
-The exact remaining build steps, from the repository root, are:
+The installer used here was run with `--mode unattended --accept_eula 1`,
+`--installdir "$PWD/.tools/intelFPGA_lite/21.1"`, and
+`--disable-components quartus_help,arria_lite,cyclone10lp,cyclonev,max,max10,questa_fse,questa_fe,modelsim_ase,modelsim_ae`.
+Only accept the license once authorized to do so. The initial installation did
+not include the missing Cyclone IV package.
+
+The exact remaining build steps, from the repository root, after installing
+Cyclone IV support are:
 
 ```sh
 # Adjust to the actual installed Quartus directory; bin/ must be inside it.
-export QUARTUS_ROOTDIR=/path/to/intelFPGA_lite/21.1/quartus
+export QUARTUS_ROOTDIR="$PWD/.tools/intelFPGA_lite/21.1/quartus"
+# Fedora 44 compatibility library, extracted from the signed Fedora RPM:
+export LD_LIBRARY_PATH="$PWD/.tools/quartus-deps/root/usr/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 tools/fxpakos/build_mk3_mini.sh
 # Produces verilog/sd2snes_mini/fpga_mini.bi3 after passing timing checks.
 
 # Put arm-none-eabi-gcc on PATH (13.2.Rel1 used for the compile checks here).
 make -C utils bin2c
+make -C src/utils
 make -C src CONFIG=config-mk3 all
 # Expected firmware output: src/obj-mk3/firmware.im3
 ```

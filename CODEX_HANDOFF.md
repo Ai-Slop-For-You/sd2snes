@@ -6,7 +6,9 @@ Phase 1 is complete; read `docs/FXPAK_OS_PHASE1.md` for the preserved baseline.
 Phase 2 now has selected-ROM sidecar loading, generation/CRC validation and
 bounded VBlank uploads, with NTSC/PAL emulator coverage. Read
 `docs/FXPAK_OS_PHASE2.md` before continuing. The target is FXPAK Pro Mk.III.
-The remaining hardware build step is Quartus Lite 21.1.1 synthesis of
+Quartus Lite 21.1.1 is installed and its compiler runs locally. Cyclone IV
+device support is still missing; its separate download agreement awaits user
+approval. The remaining hardware build step is synthesis of
 `verilog/sd2snes_mini/fpga_mini.bi3`, followed by the MCU firmware link and
 physical testing. A pinned Mk.III build wrapper and exact instructions are in
 the Phase 2 document. No carousel or selected-game metadata panel was added.
