@@ -15,15 +15,23 @@ esac
 test -s "$mini"
 version=1.11.0-fxpak-p2
 mkdir -p .build/mk3-firmware
+# A compiler/verifier failure must not leave a manifest from an older build.
+rm -f .build/mk3-firmware/SHA256SUMS .build/mk3-firmware/source-revision.log \
+  .build/mk3-firmware/compiler-version.log
 make -C utils bin2c
 make -C src/utils
-# Regenerate cfgware.h when switching asset paths; do not reuse preflight objects.
-make -C src CONFIG=config-mk3 clean
-make -C src CONFIG=config-mk3 "CONFIG_CFGWARE=$mini" "VERSION=$version" all \
-  2>&1 | tee .build/mk3-firmware/build.log
-python3 tools/fxpakos/verify_mk3_firmware.py src/obj-mk3/firmware.im3 \
-  src/obj-mk3/sd2snes.elf "$mini" --version "$version" \
-  | tee .build/mk3-firmware/verify.log
+# Both Mk.III MCU variants use the same mini core. Mk.II is not built.
+for board in mk3 mk3-stm32; do
+  extension=im3
+  [[ "$board" != mk3-stm32 ]] || extension=stm
+  # Regenerate cfgware.h when switching asset paths; do not reuse preflight objects.
+  make -C src "CONFIG=config-$board" clean
+  make -C src "CONFIG=config-$board" "CONFIG_CFGWARE=$mini" "VERSION=$version" all \
+    2>&1 | tee ".build/mk3-firmware/$board-build.log"
+  python3 tools/fxpakos/verify_mk3_firmware.py "src/obj-$board/firmware.$extension" \
+    "src/obj-$board/sd2snes.elf" "$mini" --version "$version" --board "$board" \
+    2>&1 | tee ".build/mk3-firmware/$board-verify.log"
+done
 git rev-parse HEAD > .build/mk3-firmware/source-revision.log
 arm-none-eabi-gcc --version > .build/mk3-firmware/compiler-version.log
-sha256sum "$mini" src/obj-mk3/firmware.im3 > .build/mk3-firmware/SHA256SUMS
+sha256sum "$mini" src/obj-mk3/firmware.im3 src/obj-mk3-stm32/firmware.stm > .build/mk3-firmware/SHA256SUMS

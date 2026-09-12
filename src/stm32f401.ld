@@ -80,12 +80,15 @@ SECTIONS
   . = ALIGN(4);
 
   /* BSS */
-  .bss :
+  .bss (NOLOAD) :
   {
     __bss_start__ = .;
     *(.bss)
     *(.bss.*)
     *(COMMON)
+    /* STM32 has one SRAM bank: clear the shared AHB buffers at startup. */
+    *(.ahbram)
+    *(.ahbram.*)
     __bss_end__ = .;
   } > ram
 
