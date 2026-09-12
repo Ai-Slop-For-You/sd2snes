@@ -1,0 +1,872 @@
+.text
+.link page $c0
+#include "memmap.i65"
+#include "dma.i65"
+#include "fxpakart.i65"
+#define META_MAIL $ff5200
+#define META_STAGE $ff7200
+#define META_COPY $7f1200
+#define META_KEEP $7f1300
+
+; Foreground only. Caller holds screen_dma_disable across the artwork generation
+; update and this routine, so NMI never pairs a new cover with an old panel.
+fxmeta_init:
+  php
+  rep #$20 : .al
+  lda #$ffff
+  sta fxmeta_fd
+  sta fxmeta_fd+2
+  sta fxmeta_generation
+  sta fxmeta_generation+2
+  stz fxmeta_valid
+  stz fxos_view_start
+  plp
+  rts
+
+fxmeta_update:
+  php
+  phb
+  phd
+  rep #$30 : .al : .xl
+  lda #0
+  tcd
+  sep #$20 : .as
+  pha
+  plb
+  rep #$20 : .al
+; Compare the actual selected descriptor as well as artwork generation: filename
+; fallback must work with firmware that does not advertise artwork at all.
+  lda filesel_sel
+  asl
+  asl
+  tay
+  lda [dirptr_addr],y
+  sta fxmeta_work_fd
+  iny
+  iny
+  lda [dirptr_addr],y
+  sta fxmeta_work_fd+2
+  lda fxmeta_work_fd
+  cmp fxmeta_fd
+  bne fxmeta_changed
+  lda fxmeta_work_fd+2
+  cmp fxmeta_fd+2
+  bne fxmeta_changed
+  lda fxart_generation
+  cmp fxmeta_generation
+  bne fxmeta_changed
+  lda fxart_generation+2
+  cmp fxmeta_generation+2
+  beq fxmeta_poll
+fxmeta_changed:
+  lda fxmeta_work_fd
+  sta fxmeta_fd
+  lda fxmeta_work_fd+2
+  sta fxmeta_fd+2
+  stz fxmeta_valid
+  stz fxmeta_handled
+  lda fxart_generation
+  sta fxmeta_generation
+  lda fxart_generation+2
+  sta fxmeta_generation+2
+  jsr fxmeta_fallback
+  jsr fxmeta_render
+fxmeta_poll:
+  rep #$20 : .al
+  lda fxmeta_handled
+  bne fxmeta_return
+  lda fxmeta_fd+2
+  and #$ff00
+  cmp #TYPE_ROM*256
+  bne fxmeta_return
+  lda @META_MAIL
+  cmp #$5846
+  bne fxmeta_return
+  lda @META_MAIL+2
+  cmp #$314d
+  bne fxmeta_return
+  lda @META_MAIL+4
+  cmp #1
+  bne fxmeta_return
+  lda @META_MAIL+6
+  cmp #256
+  bne fxmeta_return
+  jsr fxmeta_current
+  bcc fxmeta_return
+  lda @META_MAIL+8
+  and #$00ff
+  cmp #2
+  beq fxmeta_snapshot
+  cmp #3
+  bcc fxmeta_return
+  cmp #5
+  bcs fxmeta_return
+  inc fxmeta_handled
+fxmeta_return:
+  pld
+  plb
+  plp
+  rts
+fxmeta_snapshot:
+  ldx #0
+- lda @META_STAGE,x
+  sta @META_COPY,x
+  inx
+  inx
+  cpx #256
+  bcc -
+  jsr fxmeta_current
+  bcc fxmeta_return
+  lda @META_MAIL+8
+  and #$00ff
+  cmp #2
+  bne fxmeta_return
+  inc fxmeta_handled
+  jsr fxmeta_validate
+  bcc fxmeta_return
+  jsr fxmeta_current
+  bcc fxmeta_return
+  lda @META_MAIL+8
+  and #$00ff
+  cmp #2
+  bne fxmeta_return
+; Freeze accepted data separately from the publication snapshot.
+  ldx #0
+- lda @META_COPY,x
+  sta @META_KEEP,x
+  inx
+  inx
+  cpx #256
+  bcc -
+  ldx #0
+- lda @META_KEEP+32,x
+  sta fxmeta_display_text,x
+  inx
+  inx
+  cpx #64
+  bcc -
+  lda #1
+  sta fxmeta_valid
+  jsr fxmeta_render
+  bra fxmeta_return
+
+fxmeta_current:
+  rep #$20 : .al
+  lda @FXART_MAILBOX+16
+  and #$00ff
+  cmp #FXART_READY
+  bne fxmeta_no
+  lda @FXART_MAILBOX+20
+  cmp fxmeta_generation
+  bne fxmeta_no
+  eor @FXART_MAILBOX+24
+  cmp #$ffff
+  bne fxmeta_no
+  lda @FXART_MAILBOX+22
+  cmp fxmeta_generation+2
+  bne fxmeta_no
+  eor @FXART_MAILBOX+26
+  cmp #$ffff
+  bne fxmeta_no
+  lda @META_MAIL+12
+  cmp fxmeta_generation
+  bne fxmeta_no
+  lda @META_MAIL+14
+  cmp fxmeta_generation+2
+  bne fxmeta_no
+  sec
+  rts
+fxmeta_no:
+  clc
+  rts
+
+fxmeta_validate:
+  rep #$30 : .al : .xl
+  lda @META_COPY
+  cmp #$5846
+  bne fxmeta_no
+  lda @META_COPY+2
+  cmp #$314d
+  bne fxmeta_no
+  lda @META_COPY+4
+  cmp #1
+  bne fxmeta_no
+  lda @META_COPY+6
+  cmp #256
+  bne fxmeta_no
+  lda @META_COPY+8
+  cmp fxmeta_generation
+  bne fxmeta_no
+  eor @META_COPY+20
+  cmp #$ffff
+  bne fxmeta_no
+  lda @META_COPY+10
+  cmp fxmeta_generation+2
+  bne fxmeta_no
+  eor @META_COPY+22
+  cmp #$ffff
+  bne fxmeta_no
+  lda @META_COPY+12
+  cmp #224
+  bne fxmeta_no
+  lda @META_COPY+14
+  ora @META_COPY+24
+  ora @META_COPY+26
+  ora @META_COPY+28
+  ora @META_COPY+30
+  bne fxmeta_no
+  lda @META_COPY+16
+  eor @META_COPY+18
+  cmp #$ffff
+  bne fxmeta_no
+  ldx #192
+- lda @META_COPY,x
+  bne fxmeta_no
+  inx
+  inx
+  cpx #256
+  bcc -
+; CCITT-FALSE over payload, sharing only the immutable artwork CRC table.
+  lda #$ffff
+  sta fxmeta_crc
+  ldx #32
+fxmeta_crc_loop:
+  lda @META_COPY,x
+  and #$00ff
+  sta fxmeta_temp
+  lda fxmeta_crc
+  xba
+  and #$00ff
+  eor fxmeta_temp
+  asl
+  tay
+  lda fxmeta_crc
+  xba
+  and #$ff00
+  sta fxmeta_temp
+  phx
+  tyx
+  lda @fxart_crc_table,x
+  eor fxmeta_temp
+  sta fxmeta_crc
+  plx
+  inx
+  cpx #256
+  bcc fxmeta_crc_loop
+  lda fxmeta_crc
+  cmp @META_COPY+16
+  bne fxmeta_no
+  lda @META_COPY+184
+  beq +
+  cmp #1900
+  bcc fxmeta_no
+  cmp #2200
+  bcs fxmeta_no
++ lda @META_COPY+188
+  and #$fc00
+  bne fxmeta_no
+  lda @META_COPY+190
+  and #$fffe
+  bne fxmeta_no
+  lda @META_COPY+186
+  beq fxmeta_players_ok
+  and #$00ff
+  beq fxmeta_no
+  cmp #9
+  bcs fxmeta_no
+  sta fxmeta_temp
+  lda @META_COPY+187
+  and #$00ff
+  cmp fxmeta_temp
+  bcc fxmeta_no
+  cmp #9
+  bcs fxmeta_no
+fxmeta_players_ok:
+  lda @META_COPY+32
+  and #$00ff
+  beq fxmeta_no
+  ldx #32
+  ldy #96
+  jsr fxmeta_text_valid
+  bcc fxmeta_no
+  ldy #128
+  jsr fxmeta_text_valid
+  bcc fxmeta_no
+  ldy #160
+  jsr fxmeta_text_valid
+  bcc fxmeta_no
+  ldy #184
+  jsr fxmeta_text_valid
+  rts
+; X inclusive / Y exclusive; require printable ASCII, NUL, zero tail.
+fxmeta_text_valid:
+  sty fxmeta_end
+  stz fxmeta_temp
+- lda @META_COPY,x
+  and #$00ff
+  beq fxmeta_text_zero
+  ldy fxmeta_temp
+  bne fxmeta_no
+  cmp #32
+  bcc fxmeta_no
+  cmp #127
+  bcs fxmeta_no
+  bra fxmeta_text_next
+fxmeta_text_zero:
+  inc fxmeta_temp
+fxmeta_text_next:
+  inx
+  cpx fxmeta_end
+  bcc -
+  lda fxmeta_temp
+  beq fxmeta_no
+  sec
+  rts
+
+fxmeta_fallback:
+  rep #$30 : .al : .xl
+  ldx #0
+  lda #0
+- sta fxmeta_display_text,x
+  inx
+  inx
+  cpx #64
+  bcc -
+  lda fxmeta_fd
+  sta fxmeta_ptr
+  lda fxmeta_fd+2
+  and #$00ff
+  beq fxmeta_fallback_empty
+  clc
+  adc #$c0
+  sep #$20 : .as
+  sta fxmeta_ptr+2
+  ldx #0
+  ldy #6
+- phd
+  rep #$20 : .al
+  lda #!fxmeta_ptr
+  tcd
+  sep #$20 : .as
+  lda [0],y
+  pld
+  cmp #2
+  bcc fxmeta_fallback_done
+  cmp #32
+  bcc +
+  cmp #127
+  bcc ++
++ lda #$3f
+++ sta fxmeta_display_text,x
+  iny
+  inx
+  cpx #63
+  bcc -
+fxmeta_fallback_done:
+  rep #$20 : .al
+  rts
+fxmeta_fallback_empty:
+  lda #$494c
+  sta fxmeta_display_text
+  lda #$5242
+  sta fxmeta_display_text+2
+  lda #$5241
+  sta fxmeta_display_text+4
+  lda #$0059
+  sta fxmeta_display_text+6
+  rts
+
+; Draw the entire panel from accepted data (or filename fallback) in WRAM.
+; No PPU writes, DMA, shared text renderer, or NMI scratch state.
+fxmeta_render:
+  rep #$30 : .al : .xl
+  ldx #11*64+12*2
+  ldy #12
+fxmeta_clear_row:
+  lda #0
+  stx fxmeta_end
+  phx
+  ldx #19
+- phx
+  ldx fxmeta_end
+  sta @BG1_TILE_BUF,x
+  sta @BG2_TILE_BUF,x
+  inc fxmeta_end
+  inc fxmeta_end
+  plx
+  dex
+  bne -
+  plx
+  txa
+  clc
+  adc #64
+  tax
+  dey
+  bne fxmeta_clear_row
+  lda #!fxmeta_display_text
+  sta fxmeta_ptr
+  sep #$20 : .as
+  lda #^fxmeta_display_text
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  lda #11*64+24
+  sta fxmeta_target
+  ldy #3
+- phy
+  jsr fxmeta_line
+  ply
+  dey
+  bne -
+  jsr fxmeta_truncation
+  lda fxmeta_valid
+  bne fxmeta_render_fields
+  lda #!fxmeta_no_details
+  sta fxmeta_ptr
+  sep #$20 : .as
+  lda #^fxmeta_no_details
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  lda #16*64+24
+  sta fxmeta_target
+  jsr fxmeta_line
+  rts
+fxmeta_render_fields:
+; Year and player range on a single bounded line.
+  lda #$2020
+  ldx #0
+- sta fxmeta_line_text,x
+  inx
+  inx
+  cpx #20
+  bcc -
+  stz fxmeta_line_text+18
+  lda @META_KEEP+184
+  beq +
+  jsr bin2dec16
+  rep #$30 : .al : .xl
+  lda stringbuf+1
+  sta fxmeta_line_text
+  lda stringbuf+3
+  sta fxmeta_line_text+2
++ lda @META_KEEP+186
+  and #$00ff
+  beq +
+  ora #$0030
+  sta fxmeta_temp
+  sep #$20 : .as
+  sta fxmeta_line_text+6
+  lda #$2d
+  sta fxmeta_line_text+7
+  lda @META_KEEP+187
+  ora #$30
+  sta fxmeta_line_text+8
+  lda #$50
+  sta fxmeta_line_text+10
+  lda #$4c
+  sta fxmeta_line_text+11
+  lda #$41
+  sta fxmeta_line_text+12
+  lda #$59
+  sta fxmeta_line_text+13
+  lda #$45
+  sta fxmeta_line_text+14
+  lda #$52
+  sta fxmeta_line_text+15
+  lda #$53
+  sta fxmeta_line_text+16
++ rep #$20 : .al
+  lda #!fxmeta_line_text
+  sta fxmeta_ptr
+  sep #$20 : .as
+  lda #^fxmeta_line_text
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  lda #14*64+24
+  sta fxmeta_target
+  jsr fxmeta_line
+; Labels are only emitted when the corresponding optional field is present.
+  lda @META_KEEP+96
+  and #$ff
+  beq +
+  lda #!fxmeta_publisher_label
+  sta fxmeta_ptr
+  lda #15*64+24
+  sta fxmeta_target
+  jsr fxmeta_rom_line
+  lda #!META_KEEP+96
+  sta fxmeta_ptr
+  jsr fxmeta_record_line
++ lda @META_KEEP+128
+  and #$ff
+  beq +
+  lda #!fxmeta_developer_label
+  sta fxmeta_ptr
+  lda #17*64+24
+  sta fxmeta_target
+  jsr fxmeta_rom_line
+  lda #!META_KEEP+128
+  sta fxmeta_ptr
+  jsr fxmeta_record_line
++ lda @META_KEEP+160
+  and #$ff
+  beq +
+  lda #!fxmeta_genre_label
+  sta fxmeta_ptr
+  lda #19*64+24
+  sta fxmeta_target
+  jsr fxmeta_rom_line
+  lda #!META_KEEP+160
+  sta fxmeta_ptr
+  jsr fxmeta_record_line
++ lda @META_KEEP+188
+  sta fxmeta_chip_bits
+  lda @META_KEEP+190
+  asl
+  asl
+  asl
+  asl
+  asl
+  asl
+  asl
+  asl
+  asl
+  asl
+  ora fxmeta_chip_bits
+  sta fxmeta_chip_bits
+  lda #21*64+24
+  sta fxmeta_target
+  stz fxmeta_chip_index
+  stz fxmeta_column
+  ldx #0
+- lda #$2020
+  sta fxmeta_line_text,x
+  inx
+  inx
+  cpx #20
+  bcc -
+fxmeta_chip_loop:
+  lsr fxmeta_chip_bits
+  bcc fxmeta_chip_next
+  ldx fxmeta_chip_index
+  lda @fxmeta_chip_names,x
+  sta fxmeta_ptr
+  sep #$20 : .as
+  lda #^fxmeta_chip_names
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  ldy #0
+fxmeta_chip_char:
+  phd
+  lda #!fxmeta_ptr
+  tcd
+  sep #$20 : .as
+  lda [0],y
+  pld
+  cmp #0
+  beq fxmeta_chip_space
+  ldx fxmeta_column
+  sta fxmeta_line_text,x
+  inc fxmeta_column
+  iny
+  rep #$20 : .al
+  lda fxmeta_column
+  cmp #19
+  bcc fxmeta_chip_char
+  phy
+  jsr fxmeta_flush_chips
+  ply
+  lda fxmeta_target
+  cmp #23*64+24
+  bcs fxmeta_more_chips
+  bra fxmeta_chip_char
+fxmeta_chip_space:
+  rep #$20 : .al
+  inc fxmeta_column
+  lda fxmeta_column
+  cmp #19
+  bcc fxmeta_chip_next
+  jsr fxmeta_flush_chips
+  lda fxmeta_target
+  cmp #23*64+24
+  bcs fxmeta_more_chips
+fxmeta_chip_next:
+  rep #$20 : .al
+  inc fxmeta_chip_index
+  inc fxmeta_chip_index
+  lda fxmeta_chip_index
+  cmp #22
+  bcc fxmeta_chip_loop
+  lda fxmeta_column
+  beq fxmeta_render_done
+  jsr fxmeta_flush_chips
+fxmeta_render_done:
+  rts
+fxmeta_more_chips:
+  lda #512+$2b*2+$2000
+  sta @BG1_TILE_BUF+22*64+24+36
+  rts
+fxmeta_flush_chips:
+  lda fxmeta_ptr
+  pha
+  lda fxmeta_ptr+2
+  pha
+  lda #!fxmeta_line_text
+  sta fxmeta_ptr
+  sep #$20 : .as
+  lda #^fxmeta_line_text
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  jsr fxmeta_line
+  pla
+  sta fxmeta_ptr+2
+  pla
+  sta fxmeta_ptr
+  stz fxmeta_column
+  ldx #0
+- lda #$2020
+  sta fxmeta_line_text,x
+  inx
+  inx
+  cpx #20
+  bcc -
+  rts
+fxmeta_rom_line:
+  sep #$20 : .as
+  lda #^fxmeta_publisher_label
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  jmp fxmeta_line
+fxmeta_record_line:
+  sep #$20 : .as
+  lda #^META_KEEP
+  sta fxmeta_ptr+2
+  rep #$20 : .al
+  jsr fxmeta_line
+  jmp fxmeta_truncation
+
+; Mark clipped titles/optional fields explicitly; accepted bytes stay intact.
+fxmeta_truncation:
+  phd
+  lda #!fxmeta_ptr
+  tcd
+  sep #$20 : .as
+  lda [0]
+  pld
+  cmp #0
+  beq +
+  rep #$20 : .al
+  lda fxmeta_target
+  sec
+  sbc #64
+  clc
+  adc #32
+  tax
+  lda #512+$2e*2+$2000
+  sta @BG1_TILE_BUF,x
+  sta @BG1_TILE_BUF+2,x
+  sta @BG1_TILE_BUF+4,x
++ rep #$20 : .al
+  rts
+
+; 19 characters, 8 logical pixels each. Blank cells after NUL.
+fxmeta_line:
+  ldx fxmeta_target
+  ldy #0
+  stz fxmeta_line_end
+fxmeta_line_loop:
+  lda fxmeta_line_end
+  bne fxmeta_line_blank
+  phd
+  lda #!fxmeta_ptr
+  tcd
+  sep #$20 : .as
+  lda [0],y
+  pld
+  cmp #0
+  beq fxmeta_line_nul
+  rep #$20 : .al
+  and #$00ff
+  asl
+  clc
+  adc #512
+  ora #$2000
+  bra fxmeta_line_store
+fxmeta_line_nul:
+  rep #$20 : .al
+  inc fxmeta_line_end
+fxmeta_line_blank:
+  lda #0
+fxmeta_line_store:
+  sta @BG1_TILE_BUF,x
+  lda #0
+  sta @BG2_TILE_BUF,x
+  inx
+  inx
+  iny
+  cpy #19
+  bcc fxmeta_line_loop
+  lda fxmeta_ptr
+  clc
+  adc #19
+  sta fxmeta_ptr
+  lda fxmeta_target
+  clc
+  adc #64
+  sta fxmeta_target
+  rts
+
+fxmeta_no_details .byt "ROM LIBRARY",0
+fxmeta_publisher_label .byt "PUBLISHER",0
+fxmeta_developer_label .byt "DEVELOPER",0
+fxmeta_genre_label .byt "GENRE",0
+fxmeta_chip_names .word !fxmeta_sa1,!fxmeta_superfx,!fxmeta_dsp,!fxmeta_cx4,!fxmeta_sdd1,!fxmeta_spc7110,!fxmeta_st010,!fxmeta_st011,!fxmeta_st018,!fxmeta_obc1,!fxmeta_msu1
+fxmeta_sa1 .byt "SA1",0
+fxmeta_superfx .byt "SUPERFX",0
+fxmeta_dsp .byt "DSP",0
+fxmeta_cx4 .byt "CX4",0
+fxmeta_sdd1 .byt "SDD1",0
+fxmeta_spc7110 .byt "SPC7110",0
+fxmeta_st010 .byt "ST010",0
+fxmeta_st011 .byt "ST011",0
+fxmeta_st018 .byt "ST018",0
+fxmeta_obc1 .byt "OBC1",0
+fxmeta_msu1 .byt "MSU1",0
+
+; Generate doubled font in temporary $7f2000..3fff, once during forced blank.
+; Each 2bpp glyph becomes two adjacent 4bpp tiles (upper planes remain zero).
+fxos_wide_font:
+  php
+  rep #$10 : .xl
+  sep #$20 : .as
+  ldx #$2000
+  stx $2181
+  lda #1
+  sta $2183
+  DMA7(#$08, #$2000, #^zero, #!zero, #$80)
+  ldx #0
+fxos_font_loop:
+  rep #$20 : .al
+  txa
+  and #$fff0
+  asl
+  asl
+  sta fxmeta_target
+  txa
+  and #15
+  ora fxmeta_target
+  sta fxmeta_target
+  lda @font,x
+  and #$ff
+  sta fxmeta_temp
+  lsr
+  lsr
+  lsr
+  lsr
+  tay
+  sep #$20 : .as
+  phx
+  tyx
+  lda @fxos_double_pixels,x
+  plx
+  phx
+  ldx fxmeta_target
+  sta @$7f2000,x
+  plx
+  rep #$20 : .al
+  lda fxmeta_temp
+  and #15
+  tay
+  sep #$20 : .as
+  phx
+  tyx
+  lda @fxos_double_pixels,x
+  plx
+  phx
+  ldx fxmeta_target
+  sta @$7f2020,x
+  plx
+  inx
+  cpx #2048
+  bcc fxos_font_loop
+  ldx #$2000
+  stx $2116
+  DMA7(#$01, #$2000, #$7f, #$2000, #$18)
+  plp
+  rts
+fxos_double_pixels .byt $00,$03,$0c,$0f,$30,$33,$3c,$3f,$c0,$c3,$cc,$cf,$f0,$f3,$fc,$ff
+
+; Three physical rows, retaining the original 18-entry page/navigation model.
+fxos_view_update:
+  php
+  rep #$20 : .al
+  lda fxos_view_start
+  sta fxos_old_view
+  lda filesel_sel
+  beq +
+  dec
++ cmp #16
+  bcc +
+  lda #15
++ sta fxos_view_start
+  cmp fxos_old_view
+  beq +
+  sep #$20 : .as
+  lda #1
+  sta filesel_dirty
++ sep #$20 : .as
+  lda filesel_sel
+  sec
+  sbc fxos_view_start
+  clc
+  adc #24
+  sta bar_yl
+  plp
+  rts
+fxos_clear_list:
+  php
+  rep #$30 : .al : .xl
+  lda #0
+  ldx #25*64
+- sta @BG1_TILE_BUF,x
+  sta @BG2_TILE_BUF,x
+  inx
+  inx
+  cpx #28*64
+  bcc -
+  plp
+  rts
+
+fxos_footer:
+  php
+  phb
+  sep #$20 : .as
+  lda #$7e
+  pha
+  plb
+  rep #$30 : .al : .xl
+  ldx #0
+  lda #0
+- sta !BG1_TILE_BUF+29*64,x
+  sta !BG2_TILE_BUF+29*64,x
+  inx
+  inx
+  cpx #64
+  bcc -
+  ldx #0
+  ldy #2
+- lda @fxos_footer_text,x
+  and #$ff
+  beq +
+  asl
+  clc
+  adc #512
+  ora #$2000
+  sta !BG1_TILE_BUF+29*64,y
+  inx
+  iny
+  iny
+  bra -
++ plb
+  plp
+  rts
+fxos_footer_text .byt "A PLAY  B BACK  X MENU  Y MORE",0

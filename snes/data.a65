@@ -296,4 +296,25 @@ fxart_candidate_path
   .byt 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
   .byt 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
   .byt 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+; Metadata state is private to foreground; full records live at 7f1200/1300.
+fxmeta_valid .word 0
+fxmeta_generation .word 0,0
+fxmeta_handled .word 0
+fxmeta_fd .word 0,0
+fxmeta_work_fd .word 0,0
+fxmeta_ptr .byt 0,0,0,0
+fxmeta_temp .word 0
+fxmeta_end .word 0
+fxmeta_crc .word 0
+fxmeta_target .word 0
+fxmeta_line_end .word 0
+fxmeta_chip_bits .word 0
+fxmeta_chip_index .word 0
+fxmeta_column .word 0
+fxos_view_start .word 0
+fxos_old_view .word 0
+fxmeta_display_text
+  .byt 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+fxmeta_line_text
+  .byt 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 _END .byt 0

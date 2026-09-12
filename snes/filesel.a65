@@ -49,9 +49,14 @@ fileselloop:
   lsr
   bcc fileselloop
   stz isr_done
-  jsr printtime
   jsr filesel_updates ; update stuff, check keys etc
+  jsr fxos_view_update
+  rep #$20 : .al
+  inc screen_dma_disable
   jsr fxart_update
+  jsr fxmeta_update
+  dec screen_dma_disable
+  sep #$20 : .as
   lda filesel_dirty   ; is there ANY reason to redraw the menu?
   cmp #$01
   beq fileselloop_redraw ; then do
@@ -73,29 +78,6 @@ filesel_cleanup:
   lda dirend_idx
   lsr
   lsr
-  pha
-filesel_cleanup_loop  ; pad rest of screen with empty lines
-  cmp listdisp        ; end of screen reached?
-  beq +               ; then leave
-  pha
-  clc
-  adc #$09            ; first line in text area
-  inc
-  sta print_y
-  stz print_x
-  lda #^space64
-  ldx #!space64
-  sta print_bank
-  stx print_src
-  stz print_pal
-  lda #64
-  sta print_count
-  jsr hiprint
-  pla
-  inc
-  bra filesel_cleanup_loop
-+
-  pla
   cmp filesel_sel
   beq filesel_cleanup_out
   bpl filesel_cleanup_out
@@ -111,7 +93,10 @@ filesel_updates:
   sta dirptr_idx
   lda filesel_sel
   clc
-  adc #$08
+  sec
+  sbc fxos_view_start
+  clc
+  adc #24
   sta bar_yl
   lda #FXOS_BAR_WIDTH
   sta bar_wl
@@ -195,6 +180,7 @@ filesel_redraw_out
   rts
 
 redraw_filelist
+  jsr fxos_clear_list
   ldy #$0000
   sty dirptr_idx
   sty direntry_fits_idx
@@ -253,9 +239,25 @@ redraw_filelist_out
 
 print_direntry:
   lda cursor_y
+  inc cursor_y
+  sec
+  sbc #9
+  cmp fxos_view_start
+  bcc fxos_skip_entry
+  sec
+  sbc fxos_view_start
+  cmp #3
+  bcs fxos_skip_entry
+  clc
+  adc #25
   sta print_y
-  inc
-  sta cursor_y
+  bra fxos_print_entry
+fxos_skip_entry:
+  lda #0
+  ldy direntry_fits_idx
+  sta !direntry_fits,y
+  rts
+fxos_print_entry:
 
   lda dirent_bank
   ldx dirent_addr
@@ -908,31 +910,7 @@ setup_224_adjsel
   rts
 
 filesel_statusbar
-  pha
-  phx
-  php
-  sep #$20 : .as
-  rep #$10 : .xl
-  lda #^text_statusbar_keys
-  sta @print_bank
-  rep #$20 : .al
-  lda #!text_statusbar_keys
-  sta @print_src
-  sep #$20 : .as
-  lda #$00
-  sta @print_pal
-  lda #$02
-  sta @print_x
-  lda #$40
-  sta @print_count
-  lda listdisp
-  clc
-  adc #$0a
-  sta @print_y
-  jsr hiprint
-  plp
-  plx
-  pla
+  jsr fxos_footer
   rts
 
 select_last_file:

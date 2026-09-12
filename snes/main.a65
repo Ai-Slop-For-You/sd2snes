@@ -211,6 +211,8 @@ setup_gfx:
   jsr fxos_init_chrome
   jsr fxos_init_cover
   jsr fxart_menu_init
+  jsr fxos_wide_font
+  jsr fxmeta_init
 
 ; initialize window stack
   ldx #$ffff

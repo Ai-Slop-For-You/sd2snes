@@ -124,10 +124,10 @@ hdma_math_src
 
 hdma_bar_color_src
   ; normal color
-  .byt $00, $2a ; set R; value = $0a
-  .byt $00, $4f ; set G; value = $0f
-  .byt $33, $9f ; set B; value = $1f; also enable math
-  .byt $33, $40 ; set G; value = $00
+  .byt $00, $26 ; normal muted purple: R=6
+  .byt $00, $46 ; brighter top edge: G=6
+  .byt $33, $8a ; B=10; also enable math
+  .byt $33, $43 ; normal fill: G=3
   .byt $33, $00 ; math stays on, no color changes
   .byt $33, $00 ; |
   .byt $33, $00 ; |

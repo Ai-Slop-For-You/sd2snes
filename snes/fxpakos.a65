@@ -8,29 +8,72 @@
 ; from NMI: they modify the foreground print parameters and WRAM port.
 fxos_init_chrome:
   php
+; BG2 palette 7 in the Mode 3 header only; Mode 5 text palettes stay intact.
+  sep #$20 : .as
+  lda #112
+  sta $2121
+  DMA7(#$00, #8, #^fxos_chrome_palette, #!fxos_chrome_palette, #$22)
   phb
   sep #$20 : .as
   lda #$7e
   pha
   plb
   rep #$30 : .al : .xl
-  ldx #$0000
-  ldy #$0000
-- lda @fxos_nav_text,x
+  ldx #0
+  ldy #0
+fxos_brand_loop:
+  lda @fxos_brand_text,x
   and #$00ff
-  beq +
+  beq fxos_collection_start
   ora #$2000
-  sta !BG2_TILE_BUF+64+2,y
+  sta !BG2_TILE_BUF+64+4,y
   inx
   iny
   iny
-  bra -
-+ plb
+  bra fxos_brand_loop
+fxos_collection_start:
+  ldx #0
+  ldy #0
+fxos_collection_loop:
+  lda @fxos_collection_text,x
+  and #$00ff
+  beq fxos_nav_start
+  ora #$2000
+  sta !BG2_TILE_BUF+3*64+4,y
+  inx
+  iny
+  iny
+  bra fxos_collection_loop
+fxos_nav_start:
+  ldx #0
+  ldy #0
+fxos_nav_loop:
+  lda @fxos_nav_text,x
+  and #$00ff
+  beq fxos_border_start
+  ora #$3c00
+  sta !BG2_TILE_BUF+5*64+4,y
+  inx
+  iny
+  iny
+  bra fxos_nav_loop
+fxos_border_start:
+  ldy #4
+  lda #$3c2d
+fxos_border_loop:
+  sta !BG2_TILE_BUF+6*64,y
+  iny
+  iny
+  cpy #60
+  bcc fxos_border_loop
+  plb
   plp
   rts
 
-fxos_nav_text
-  .byt "FXPAK OS  SNES  FAV  REC  SET", 0
+fxos_chrome_palette .word 0,$6e97,$30ea,$5152
+fxos_brand_text .byt "FXPAK OS",0
+fxos_collection_text .byt "SUPER NINTENDO COLLECTION",0
+fxos_nav_text .byt "LIBRARY   FAVORITES   RECENT",0
 
 ; Called only during forced blank by setup_gfx. Keep the stock fonts,
 ; background modes and tilemap allocation. OBJ uses byte VRAM $c800-$e3ff,
