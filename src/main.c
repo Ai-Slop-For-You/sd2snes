@@ -15,6 +15,7 @@
 #include "filetypes.h"
 #include "memory.h"
 #include "snes.h"
+#include "fxpak_meta.h"
 #include "led.h"
 #include "sort.h"
 #include "cic.h"
@@ -243,6 +244,7 @@ int main(void) {
 
     fpga_set_dac_boost(CFG.msu_volume_boost);
     fxart_init();
+    fxmeta_init();
     cfg_load_to_menu();
     CFG.show_tribute = 0;
     cfg_save();

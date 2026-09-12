@@ -9,6 +9,6 @@ variants=("$@")
 for variant in "${variants[@]}"; do
   case "$variant" in mk2|mk3|mk3-stm32) ;; *) echo "Unknown MCU variant: $variant" >&2; exit 2 ;; esac
   make -C "$root/src" CONFIG="config-$variant" -o "obj-$variant/cfgware.h" \
-    "obj-$variant/fxpak_art.o" "obj-$variant/main.o" \
+    "obj-$variant/fxpak_art.o" "obj-$variant/fxpak_meta.o" "obj-$variant/main.o" \
     "obj-$variant/snes.o" "obj-$variant/filetypes.o"
 done

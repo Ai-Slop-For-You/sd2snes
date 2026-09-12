@@ -30,6 +30,7 @@
 #include "config.h"
 #include "uart.h"
 #include "snes.h"
+#include "fxpak_meta.h"
 #include "memory.h"
 #include "fileops.h"
 #include "ff.h"
@@ -363,14 +364,15 @@ uint8_t menu_main_loop() {
     if(get_snes_reset()) {
       cmd = 0;
     }
-    if (!cmd && !get_snes_reset()) fxart_poll();
-    else fxart_cancel();
+    if (!cmd && !get_snes_reset()) {fxmeta_poll();fxart_poll();}
+    else {fxmeta_cancel();fxart_cancel();}
     sleep_ms(20);
     cli_entrycheck();
     if (!cmd) {
       cmd = usbint_handler();
     }
   }
+  fxmeta_cancel();
   fxart_cancel();
   return cmd;
 }
