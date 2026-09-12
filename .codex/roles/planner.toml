@@ -1,0 +1,4 @@
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
+developer_instructions = "Use the supplied audit to plan only remaining requested work, incremental edits, acceptance checks and blockers. Do not repeat broad scans or propose new milestones. No changes or mutating tests. Execute only this bounded role assignment; do not launch the full cycle or spawn children. Prefer concise evidence over raw logs. Never push, merge, flash hardware or expand scope. Report effective runtime overrides when visible; read-only instructions are not proof of sandbox enforcement."

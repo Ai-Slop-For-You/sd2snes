@@ -1,0 +1,33 @@
+# Project defaults; existing sessions and explicit runtime overrides may win.
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2
+default_subagent_model = "gpt-5.6-terra"
+default_subagent_reasoning_effort = "low"
+
+[agents.debugger]
+description = "Use only after the coordinator gives a concrete difficult implementation/debugging reason, evidence and stopping condition."
+config_file = "roles/debugger.toml"
+
+[agents.implementer]
+description = "Implement the bounded assigned change incrementally within owned paths."
+config_file = "roles/implementer.toml"
+
+[agents.investigator]
+description = "Audit relevant implementation and evidence; classify requested criteria as completed, partial, missing, or unverified."
+config_file = "roles/investigator.toml"
+
+[agents.planner]
+description = "Use the supplied audit to plan only remaining requested work, incremental edits, acceptance checks and blockers."
+config_file = "roles/planner.toml"
+
+[agents.reviewer]
+description = "Independently inspect the exact candidate SHA, cumulative diff from cycle baseline, surrounding code at that SHA and acceptance/test evidence."
+config_file = "roles/reviewer.toml"
+
+[agents.tester]
+description = "Run only the assigned checks; write only agreed generated outputs, never source, index or commits."
+config_file = "roles/tester.toml"
