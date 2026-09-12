@@ -9,6 +9,8 @@
 #include <cstdlib>
 extern "C" {
 #include "fxpak_art.h"
+#include "fxpak_meta.h"
+uint32_t fxmeta_host_ticks=0;
 }
 #include "fxpak_art_test_io.h"
 extern uint8_t *fxart_host_sram;
@@ -16,6 +18,7 @@ extern std::string fxart_host_root;
 extern uint8_t fxart_host_command;
 extern unsigned fxart_host_opens,fxart_host_max_read;
 static bool art_mode=false,art_service=true,art_command_pause=false;
+static bool meta_mode=false,meta_service=true;
 using namespace SNES;
 static std::map<std::string,unsigned> symbols;
 static unsigned frame=0, nmis=0, max_nmi_clocks=0, nmi_start=0;
@@ -114,9 +117,11 @@ struct FakeMCU : MMIO {
 static void frames(unsigned count) {
   for(unsigned i=0;i<count;i++) {
     mcu.service();
-    if(art_mode && art_service) {
+    if(art_mode) {
       fxart_host_command=(art_command_pause || mcu.pending || mcu.reset_requested) ? 1 : 0;
-      fxart_poll();
+      fxmeta_host_ticks=uint64_t(frame)*100/(pal_region?50:60);
+      if(meta_mode && meta_service)fxmeta_poll();
+      if(art_service)fxart_poll();
     }
     SNES::system.run();frame++;
   }
@@ -279,10 +284,134 @@ static void run_art_edge_tests() {
   std::cout<<"PASS ART EDGES region="<<(pal_region?"PAL":"NTSC")<<" frames="<<frame
     <<" max_nmi_master_clocks="<<max_nmi_clocks<<"\n";
 }
+static void meta_matches(const std::string& path) {
+  auto data=record(path);check(data.size()==256,"metadata fixture size");
+  uint32_t gen=generation();
+  for(unsigned i=0;i<4;i++){data[8+i]=gen>>(8*i);data[20+i]=(~gen)>>(8*i);}
+  if(!ramword("fxmeta_valid")) {
+    snap("meta-fail.ppm");
+    std::cerr<<"meta status="<<unsigned(sram_readbyte(FXMETA_MAILBOX+8))<<" gen="<<gen<<" handled="<<ramword("fxmeta_handled")<<"\n";
+  }
+  check(ramword("fxmeta_valid")==1,"valid metadata becomes visible");
+  check(!memcmp(memory::wram.data()+0x11300,data.data(),256),"entire accepted metadata matches compiler record");
+  check(!memcmp(memory::wram.data()+(symbols.at("fxmeta_display_text")&0x1ffff),data.data()+32,64),"display title matches accepted record");
+}
+static void meta_stamp(std::vector<uint8_t>& data,uint32_t gen) {
+  for(unsigned i=0;i<4;i++){data[8+i]=gen>>(8*i);data[20+i]=(~gen)>>(8*i);}
+}
+static void meta_publish(const std::vector<uint8_t>& data,uint32_t response) {
+  sram_writebyte(FXART_BUSY,FXMETA_MAILBOX+8);
+  sram_writeblock((void*)data.data(),FXMETA_STAGING,256);
+  sram_writelong(response,FXMETA_MAILBOX+12);
+  sram_writebyte(FXART_OK,FXMETA_MAILBOX+8);
+}
+static void meta_seal(std::vector<uint8_t>& data) {
+  unsigned crc=fxart_crc16(0xffff,data.data()+32,224);
+  data[16]=crc;data[17]=crc>>8;data[18]=~crc;data[19]=(~crc)>>8;
+}
+static void meta_fallback(const std::string& title) {
+  check(ramword("fxmeta_valid")==0,"missing/invalid metadata uses fallback");
+  unsigned a=symbols.at("fxmeta_display_text")&0x1ffff;
+  check(std::string((char*)memory::wram.data()+a)==title,"fallback uses current ROM filename");
+}
+static void run_meta_tests() {
+  const std::string first="/FXPAK Demo.sfc", second="/A very long game filename for horizontal scrolling regression test.sfc";
+  frames(200);snap("boot.ppm");meta_fallback("Homebrew/");
+  unsigned stack=cpu.getRegister(CPUDebugger::RegisterS);
+  std::vector<uint8_t> fallback_tiles(memory::vram.data()+0xc800,memory::vram.data()+0xe400);
+  std::vector<uint8_t> fallback_palette(memory::cgram.data()+0x100,memory::cgram.data()+0x120);
+  press(5);check(!ramword("fxmeta_valid"),"new selection clears old metadata immediately");
+  frames(65);meta_matches(first+".fxm");matches(first+".fxc");snap("first.ppm");
+  press(5);check(!ramword("fxmeta_valid"),"second selection clears first title");
+  frames(65);meta_matches(second+".fxm");matches(second+".fxc");snap("second.ppm");
+  press(5);frames(65);meta_fallback("Test Game 0.sfc");fallback();snap("missing.ppm");
+  press(5);frames(65);meta_fallback("Test Game 1.sfc");snap("bad-crc.ppm");
+  check(sram_readbyte(FXMETA_MAILBOX+8)==FXART_INVALID,"MCU rejects bad metadata CRC");
+  press(5);frames(65);meta_fallback("Test Game 2.sfc");snap("bad-version.ppm");
+  check(sram_readbyte(FXMETA_MAILBOX+8)==FXART_INVALID,"MCU rejects bad metadata version");
+  press(4);press(4); // Missing entry: each injection selects the valid second cover anew.
+  meta_service=false;
+  for(unsigned kind=0;kind<19;kind++) {
+    press(4);frames(25);matches(second+".fxc");
+    auto data=record(second+".fxm");uint32_t response=generation();meta_stamp(data,response);
+    if(kind==0)data[4]=2;
+    if(kind==1)data[100]^=1;
+    if(kind==2){response--;meta_stamp(data,response);} // Previous selection while real new cover is visible.
+    if(kind==3)data[20]^=1;
+    if(kind==4)data[18]^=1;
+    if(kind==5)data[24]=1;
+    if(kind==6)data[192]=1;
+    if(kind==7)data[40]='X'; // Nonzero text after NUL.
+    if(kind==8){data[186]=0;data[187]=2;}
+    if(kind==9){data[186]=3;data[187]=2;}
+    if(kind==10)data[189]=4;
+    if(kind==11)data[190]=2;
+    if(kind==12)data[6]=1;
+    if(kind==13)data[12]=1;
+    if(kind==14)data[14]=1;
+    if(kind==15)data[32]=0;
+    if(kind==16)memset(data.data()+32,'A',64);
+    if(kind==17)data[32]=128;
+    if(kind==18){data[184]=0;data[185]=1;}
+    if(kind>=6)meta_seal(data); // Semantic failures must survive valid CRC verification.
+    meta_publish(data,response);frames(65);
+    meta_fallback(second.substr(1,63));matches(second+".fxc");
+    if(kind==2)snap("stale-with-cover.ppm");
+    press(5);frames(2);
+  }
+  meta_service=true;
+  uint32_t burst=generation();
+  for(unsigned i=0;i<12;i++)for(unsigned button:{4u,5u}) {
+    frontend.buttons=1<<button;frames(2);frontend.buttons=0;frames(2);
+    check(!ramword("fxmeta_valid"),"rapid selection never retains accepted old metadata");
+  }
+  check(generation()>=burst+24,"rapid metadata selections advance generations");
+  press(4);frames(65);meta_matches(second+".fxm");matches(second+".fxc");snap("rapid.ppm");
+  // Pause the real service specifically with its metadata FIL open.
+  press(4);
+  unsigned deadline=frame+100;
+  while(!(sram_readbyte(FXMETA_MAILBOX+8)==FXART_BUSY && fxart_host_opens==1 &&
+          sram_readbyte(FXART_MAILBOX+8)==FXART_OK) && frame<deadline)frames(1);
+  check(frame<deadline,"metadata open reached for command interruption");
+  art_command_pause=true;frames(3);check(fxart_host_opens==0,"normal command closes metadata FIL");
+  art_command_pause=false;frames(65);meta_matches(first+".fxm");matches(first+".fxc");
+  unsigned modal=0;
+  for(unsigned button:{9u,1u,2u,3u}) {
+    press(button);check(rambyte("fxos_cover_visible")==0,"metadata modal hides cover");
+    snap(("modal-"+std::to_string(modal++)+".ppm").c_str());
+    press(0);frames(2);meta_matches(first+".fxm");matches(first+".fxc");
+  }
+  snap("restored.ppm");
+  press(10);press(8);check(mcu.cwd()=="/Homebrew","metadata directory entry works");
+  press(5);frames(65);meta_matches("/Homebrew/Inside Folder.sfc.fxm");fallback();snap("nested.ppm");
+  check(std::string((char*)fxart_host_sram+0x5020)=="/Homebrew/Inside Folder.sfc","metadata uses full nested identity");
+  press(0);check(mcu.cwd()=="/","metadata parent navigation works");
+  char* leaf=(char*)memory::cartrom.data()+0x21000+128+6;
+  char* dot=strrchr(leaf,'.');check(dot!=nullptr,"hidden extension fixture");*dot=1;
+  press(5);frames(65);meta_matches(first+".fxm");matches(first+".fxc");snap("hidden-valid.ppm");
+  check(std::string((char*)fxart_host_sram+0x5020)==first,"hidden extension preserves metadata request identity");*dot='.';
+  char* missing=(char*)memory::cartrom.data()+0x21000+3*128+6;
+  char* missing_dot=strrchr(missing,'.');check(missing_dot!=nullptr,"hidden missing fixture");*missing_dot=1;
+  press(5);press(5);frames(65);meta_fallback("Test Game 0");snap("hidden-missing.ppm");
+  check(std::string((char*)fxart_host_sram+0x5020)=="/Test Game 0.sfc","hidden fallback retains full request path");*missing_dot='.';
+  press(4);frames(65);meta_matches(second+".fxm");matches(second+".fxc");
+  unsigned before=nmis;frames(600);check(nmis-before==600,"metadata idle has one NMI per frame");
+  check(cpu.getRegister(CPUDebugger::RegisterS)==stack,"metadata foreground stack balanced");
+  check(!memcmp(memory::vram.data()+0xc800,fallback_tiles.data(),fallback_tiles.size()),"metadata leaves fallback tiles immutable");
+  check(!memcmp(memory::cgram.data()+0x100,fallback_palette.data(),32),"metadata leaves fallback palette immutable");
+  check(audit.unsafe_writes==0 && audit.unsafe_cgram==0,"metadata never writes active PPU registers");
+  press(4);press(8);frames(10);
+  check(mcu.launched_path==first,"correct ROM launched while metadata pending");
+  check(mcu.reset_requested && fxart_host_opens==0,"launch reaches reset with no sidecar FIL open");
+  std::cout<<"PASS META region="<<(pal_region?"PAL":"NTSC")<<" frames="<<frame<<" nmis="<<nmis
+    <<" max_nmi_master_clocks="<<max_nmi_clocks<<" max_art_tile_bytes="<<max_art_dma_bytes
+    <<" unsafe_writes="<<audit.unsafe_writes<<" unsafe_cgram="<<audit.unsafe_cgram<<"\n";
+}
 int main(int argc,char**argv) {
   if(argc<4 || argc>6) {std::cerr<<"usage: menu_harness ROM SYMBOLS OUTPUT_DIR [NTSC|PAL] [ART_SD]\n";return 2;}
   outdir=argv[3]; pal_region=argc>=5 && std::string(argv[4])=="PAL";
-  art_mode=argc==6; if(art_mode)fxart_host_root=argv[5];
+  meta_mode=std::getenv("FXMETA_TESTS")!=nullptr;
+  art_mode=argc==6;check(!meta_mode || art_mode,"metadata mode requires fixture directory"); if(art_mode)fxart_host_root=argv[5];
   std::ifstream syms(argv[2]); unsigned addr;std::string name;
   while(syms>>std::hex>>addr>>name) symbols[name]=addr;
   std::ifstream f(argv[1],std::ios::binary);std::vector<uint8_t> rom(0x400000,0);
@@ -300,6 +429,7 @@ int main(int argc,char**argv) {
   strcpy((char*)memory::cartram.data()+0x4100,"Second Favorite.sfc");
   if(art_mode) {
     fxart_host_sram=memory::cartram.data();fxart_init();
+    if(meta_mode)fxmeta_init();
     if(std::getenv("FXART_EDGE_TESTS")) {
       publish(record("/FXPAK Demo.sfc.fxc"),40);
       sram_writelong(40,FXART_MAILBOX+20);sram_writelong(~uint32_t(40),FXART_MAILBOX+24);
@@ -336,11 +466,17 @@ int main(int argc,char**argv) {
           check(!memcmp(memory::wram.data()+ga,memory::wram.data()+ta,4),"visible cover generation always current");
         }
       }
+      if(meta_mode && ramword("screen_dma_disable")==0 && ramword("window_stack_head")==0xffff && ramword("fxmeta_valid")) {
+        unsigned ma=symbols.at("fxmeta_generation")&0x1ffff,ga=symbols.at("fxart_generation")&0x1ffff;
+        check(!memcmp(memory::wram.data()+ma,memory::wram.data()+ga,4),"visible metadata generation matches artwork selection");
+        check(!memcmp(memory::wram.data()+ma,memory::wram.data()+0x11308,4),"accepted metadata generation matches visible panel");
+      }
       in_nmi=false;
     }
   };
+  if(meta_mode) {run_meta_tests();return 0;}
   if(art_mode) {if(std::getenv("FXART_EDGE_TESTS"))run_art_edge_tests();else run_art_tests();return 0;}
-  frames(180);snap("boot.ppm");
+  frames(200);snap("boot.ppm");
   check(nmis>=170,"boot reaches stable NMI loop");
   check(ramword("filesel_sel")==0,"initial selection");
   check((ramword("fxos_cover_visible")&255)==1,"cover visible on boot");

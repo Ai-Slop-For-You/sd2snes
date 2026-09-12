@@ -15,7 +15,7 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[3]
 VERIFY = ROOT / 'tools/fxpakos/verify_mk3_firmware.py'
-VERSION = '1.11.0-fxpak-p2'
+VERSION = '1.11.0-fxpak-p3'
 TOOLS = ('gcc', 'objcopy', 'nm', 'objdump', 'readelf')
 HAVE_ARM = all(shutil.which('arm-none-eabi-' + tool) for tool in TOOLS)
 

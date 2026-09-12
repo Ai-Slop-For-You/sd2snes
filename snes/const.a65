@@ -80,7 +80,7 @@ hdma_bg1scroll_src
   .byt $00, $00, $ff, $03
   .byt 127
   .byt $fc, $00, $0d, $00
-  .byt 24
+  .byt 32 ; keep all compact-list ink rows before the footer scroll change
   .byt $fc, $00, $0d, $00
   .byt 1
   .byt $fc, $00, $0f, $00
@@ -90,7 +90,7 @@ hdma_bg2scroll_src
   .byt $ff, $03
   .byt 127
   .byt $0d, $00
-  .byt 24
+  .byt 32 ; keep all compact-list ink rows before the footer scroll change
   .byt $0d, $00
   .byt 1
   .byt $0f, $00
