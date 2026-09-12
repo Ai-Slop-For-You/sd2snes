@@ -183,7 +183,13 @@ changing system libraries. Export its `usr/lib64` directory through
 
 The real `make mk3` now reaches `quartus_map`, which stops with error 20004
 because Cyclone IV device support is not installed yet. The separate
-`cyclone-21.1.1.850.qdz` download is pending approval of its vendor agreement.
+`cyclone-21.1.1.850.qdz` agreement was explicitly approved and acceptance was
+attempted. The direct agreement page fails with a Drupal AJAX dialog error
+before starting the download. The normal download route requires MyAltera
+sign-in; this browser has no signed-in session. Direct CDN requests also return
+HTTP 403. Supply the pinned package in `.tools/quartus-downloads/` or finish
+MyAltera sign-in to continue; no further approval of these same download terms
+is needed.
 No substitute or dummy bitstream was used. All Mk.III MCU translation units
 except `fpga.c` (which embeds the missing bitstream) compile successfully with
 ARM GCC 13.2.Rel1 and the original strict flags; host `genhdr`, `lpcchksum`,
