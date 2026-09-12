@@ -189,13 +189,12 @@ The worst observed NTSC NMI retains 9,990 master clocks within the harness's
 37-scanline VBlank budget, preserving the Phase 2 margin.
 
 Both native C workers pass. All **13 Python tests** pass, including real
-firmware corruption checks and the STM32 linker regression. The initial
-combined command was interrupted by the tool's 30-second execution boundary;
-the tester completed its remaining phases individually. One Python discovery
-invocation lacked the ARM PATH and skipped three tests; those exact three
-were subsequently run with the absolute bundled toolchain path and passed.
-The aggregate evidence is `.build/full-cycle/phase3/full-suite.log`, not a
-claim that an interrupted shell command itself returned success.
+firmware corruption checks and the STM32 linker regression. A final complete
+entry-point replay at `fe33954`, with the ARM toolchain on PATH, returned
+**exit status 0** with no skipped Python tests. Its output is recorded in
+`.build/full-cycle/phase3/final-suite.log`. Earlier individual-phase evidence
+is retained in `full-suite.log`; the final replay resolves that initial run's
+tool-interruption and ARM-PATH ambiguity.
 
 The new suite validates the whole accepted record against compiler output,
 correct covers/titles/fields, missing sidecars, 19 malformed publications
@@ -233,8 +232,17 @@ dc193b7cbc0d5cf3df00a3e2837ba61194faea34ab453e6a20617c1ef15bd336  firmware.stm
 9ae79c3028391063338d42ae16b19acf48d0d80858939b015ef6481f55cbefe9  fpga_mini.bi3
 ```
 
-The MCU images were built from `0de61f9`; later Phase 3 commits do not change
-their compiled MCU inputs. The menu/test source candidate is `0651311`.
+Both MCU images were rebuilt with the final wrapper at source revision
+`fe33954963d2d7a3602be5ab2f688bfff64a6d80`:
+`tools/fxpakos/build_mk3_firmware.sh --release-mini`, with ARM GCC 13.2.Rel1 on
+PATH. The wrapper selected `1.11.0-fxpak-p3` without an external version
+override, returned success, and produced the hashes above. Canonical build,
+verification, compiler and revision logs are in `.build/mk3-firmware/`; the
+complete command output is `.build/full-cycle/phase3/final-firmware.log`.
+The earlier stage-1 build used `0de61f9` MCU sources with an explicit
+`make VERSION=1.11.0-fxpak-p3` override and produced identical images, but is
+not needed to reproduce this delivery. The menu/test source is unchanged
+from `0651311` through the final documentation commits.
 The independent read-only reviewer approved code/test candidate
 `0651311a24d326c382ad66d4b5f998a26ddb5884`, including the cumulative Phase 3
 implementation from baseline `ed0292b`. The delivery manifest records the
